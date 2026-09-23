@@ -5,7 +5,7 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     // SSE Verbindung aufbauen
-    const eventSource = new EventSource('http://localhost:4000/api/events');
+    const eventSource = new EventSource('/yeti/api/events');
 
     eventSource.onmessage = (event) => {
       try {

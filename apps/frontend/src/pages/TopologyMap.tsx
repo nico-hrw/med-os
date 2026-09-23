@@ -26,7 +26,7 @@ export const TopologyMap: React.FC = () => {
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
 
   useEffect(() => {
-    const eventSource = new EventSource('http://localhost:4000/api/events');
+    const eventSource = new EventSource('/yeti/api/events');
 
     eventSource.onmessage = (event) => {
       try {

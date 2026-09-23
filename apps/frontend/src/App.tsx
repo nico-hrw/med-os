@@ -6,7 +6,7 @@ import { TopologyMap } from './pages/TopologyMap';
 
 export const App: React.FC = () => {
   return (
-    <Router>
+    <Router basename="/yeti">
       {/* Creme-Weißer Hintergrund, weiche Textfarbe */}
       <div className="flex h-screen w-full bg-[#FAFAF9] text-stone-800 font-sans selection:bg-stone-200">
         <Sidebar />
