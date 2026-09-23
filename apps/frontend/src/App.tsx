@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { TopologyMap } from './pages/TopologyMap';
+import { PluginManager } from './pages/PluginManager';
 
 export const App: React.FC = () => {
   return (
@@ -14,9 +15,11 @@ export const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/topology" element={<TopologyMap />} />
+            <Route path="/plugins" element={<PluginManager />} />
           </Routes>
         </main>
       </div>
     </Router>
   );
 };
+

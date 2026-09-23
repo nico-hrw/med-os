@@ -1,7 +1,23 @@
 import * as path from 'path';
+import * as http from 'http';
 import { PluginLoader } from './core/plugin-loader';
-import { startEventServer } from './core/event-stream';
+import { startEventServer, registerApiRoute } from './core/event-stream';
 import { DatabaseService } from './core/db';
+
+/**
+ * Liest den Body eines HTTP-Requests als JSON.
+ */
+function parseJsonBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk: Buffer) => (body += chunk.toString()));
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); }
+      catch { resolve({}); }
+    });
+    req.on('error', reject);
+  });
+}
 
 async function bootstrap() {
   console.log('🏔️  MedOS Yeti Kernel initialisiert...');
@@ -13,9 +29,72 @@ async function bootstrap() {
   
   const loader = new PluginLoader(pluginsDir);
   
-  // Register database service
-  loader.registerService('db', DatabaseService.getClient());
-  
+  // Register database service (may be null on ARM64 Windows where Prisma engine isn't available)
+  const dbClient = await DatabaseService.getClient();
+  if (dbClient) {
+    loader.registerService('db', dbClient);
+  } else {
+    console.warn('[Kernel] DB-Service nicht verfügbar — Plugins ohne Datenbankzugriff.');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  System-API: Plugin-Store Routen
+  // ─────────────────────────────────────────────────────────────
+
+  registerApiRoute('GET /api/system/plugins/available', async (_req: any, res: any) => {
+    try {
+      const available = await loader.getAvailablePlugins();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, data: available }));
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  registerApiRoute('GET /api/system/plugins/active', async (_req: any, res: any) => {
+    try {
+      const loaded = loader.getLoadedPlugins();
+      const active = Array.from(loaded.entries()).map(([name, p]) => ({
+        name,
+        version: p.manifest.version,
+        description: p.manifest.description,
+      }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, data: active }));
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  registerApiRoute('POST /api/system/plugins/install', async (req: any, res: any) => {
+    try {
+      const body = await parseJsonBody(req);
+      const pluginId = body.pluginId;
+
+      if (!pluginId || typeof pluginId !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'pluginId ist erforderlich.' }));
+        return;
+      }
+
+      // Sofortige Antwort — die eigentliche Installation läuft asynchron mit SSE-Feedback
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: `Installation von '${pluginId}' gestartet.` }));
+
+      // Installation im Hintergrund starten (Fehler werden via SSE gemeldet)
+      loader.installPlugin(pluginId).catch(err => {
+        console.error(`[Kernel] Unerwarteter Fehler in installPlugin:`, err);
+      });
+
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  // Watcher starten (überwacht nur plugins/, nicht plugins-available/)
   loader.watch();
 
   console.log('🏔️  MedOS Yeti Kernel aktiv. Warte auf Modul-Ereignisse...');
