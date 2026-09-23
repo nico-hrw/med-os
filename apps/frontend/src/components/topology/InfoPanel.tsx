@@ -79,6 +79,11 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ nodeData, onClose }) => {
           <div className="mt-8 mb-8">
             <div className="text-xs uppercase tracking-widest text-stone-400 font-sans font-semibold mb-3">Modul-Spezifikation</div>
             <h2 className="text-4xl font-serif text-stone-900 leading-tight">{nodeData.label}</h2>
+            {nodeData.technicalId && (
+              <div className="mt-1.5 font-mono text-xs text-stone-400 bg-stone-100/80 px-2 py-0.5 rounded w-fit">
+                ID: {nodeData.technicalId}
+              </div>
+            )}
             <div className="mt-4 text-stone-500 text-sm font-sans leading-relaxed">{nodeData.description}</div>
           </div>
 

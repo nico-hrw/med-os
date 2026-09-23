@@ -5,5 +5,11 @@
   "author": "MedOS Team",
   "icon": "🏥",
   "category": "Patientenmanagement",
-  "entry": "index.ts"
+  "entry": "index.ts",
+  "dependencies": [
+    {
+      "id": "database-core",
+      "name": "Zentrale Datenbank"
+    }
+  ]
 }

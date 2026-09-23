@@ -59,6 +59,10 @@ async function bootstrap() {
         name,
         version: p.manifest.version,
         description: p.manifest.description,
+        author: p.manifest.author,
+        icon: p.manifest.icon,
+        category: p.manifest.category,
+        dependencies: p.manifest.dependencies || [],
       }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, data: active }));
@@ -89,6 +93,42 @@ async function bootstrap() {
       });
 
     } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  registerApiRoute('DELETE /api/system/plugins/uninstall', async (req: any, res: any) => {
+    try {
+      const url = new URL(req.url, 'http://localhost');
+      const queryPluginId = url.searchParams.get('pluginId');
+      const queryKeepData = url.searchParams.get('keepData');
+
+      let body: any = {};
+      try {
+        body = await parseJsonBody(req);
+      } catch { /* optionaler Body */ }
+
+      const pluginId = body.pluginId || queryPluginId;
+      const keepData = body.keepData !== undefined 
+        ? Boolean(body.keepData) 
+        : (queryKeepData !== null ? queryKeepData !== 'false' : true);
+
+      if (!pluginId || typeof pluginId !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'pluginId ist erforderlich.' }));
+        return;
+      }
+
+      await loader.uninstallPlugin(pluginId, keepData);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        success: true, 
+        message: `Plugin '${pluginId}' erfolgreich deinstalliert (keepData=${keepData}).` 
+      }));
+    } catch (err: any) {
+      console.error(`[Kernel] Fehler beim Deinstallieren von Plugin:`, err.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }

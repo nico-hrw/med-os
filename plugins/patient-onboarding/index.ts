@@ -96,4 +96,14 @@ export default class PatientOnboardingPlugin implements IPlugin {
   async onUnload(): Promise<void> {
     console.log('[Patienten-Onboarding] v1.0.0: onUnload() - Ressourcen freigegeben. Tschüss!');
   }
+
+  async onUninstall(keepData: boolean): Promise<void> {
+    console.log(`[Patienten-Onboarding] v1.0.0: onUninstall(keepData=${keepData})`);
+    if (keepData) {
+      console.log('[Patienten-Onboarding] Soft Uninstall: Patientendaten und Tabellen bleiben im System erhalten.');
+    } else {
+      console.log('[Patienten-Onboarding] Hard Uninstall: Datenbereinigung wird eingeleitet.');
+    }
+  }
 }
+

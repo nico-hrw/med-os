@@ -247,6 +247,64 @@ export class PluginLoader {
     }
   }
 
+  /**
+   * Deinstalliert ein Plugin aus dem Live-Ordner plugins/.
+   * Führt optional onUninstall(keepData) aus und löscht den Ordner.
+   */
+  public async uninstallPlugin(pluginId: string, keepData = true): Promise<void> {
+    const targetPath = path.join(this.pluginsDir, pluginId);
+
+    try {
+      // 1. Prüfen, ob das Plugin aktuell geladen ist
+      const loaded = this.plugins.get(pluginId);
+      if (loaded && typeof loaded.instance.onUninstall === 'function') {
+        try {
+          console.log(`[PluginLoader] Rufe onUninstall(keepData=${keepData}) für '${pluginId}' auf...`);
+          await loaded.instance.onUninstall(keepData);
+        } catch (hookErr: any) {
+          console.warn(`[PluginLoader] Warnung: onUninstall() Fehler in '${pluginId}':`, hookErr.message);
+        }
+      }
+
+      // 2. Falls keepData === false: Vorbereitung für Datenbereinigung
+      if (!keepData) {
+        const prisma = this.context.getService('db') as any;
+        if (prisma?.pluginData) {
+          try {
+            await prisma.pluginData.deleteMany({ where: { pluginName: pluginId } });
+            console.log(`[PluginLoader] Daten für Plugin '${pluginId}' bereinigt.`);
+          } catch (dbErr: any) {
+            console.warn(`[PluginLoader] Konnte DB-Daten für '${pluginId}' nicht bereinigen:`, dbErr.message);
+          }
+        }
+      }
+
+      // 3. Hot-Unload ausführen
+      await this.unloadPlugin(pluginId);
+
+      // 4. Plugin-Verzeichnis löschen
+      await fs.rm(targetPath, { recursive: true, force: true });
+      console.log(`[PluginLoader] Plugin '${pluginId}' erfolgreich deinstalliert.`);
+
+      // 5. SSE-Event über Deinstallation
+      broadcastEvent('PLUGIN_UPDATE', {
+        action: 'UNINSTALL_COMPLETE',
+        plugin: pluginId,
+        keepData,
+        activeCount: this.plugins.size,
+      });
+
+    } catch (err: any) {
+      console.error(`[PluginLoader] Fehler beim Deinstallieren von '${pluginId}':`, err.message);
+      broadcastEvent('PLUGIN_UPDATE', {
+        action: 'UNINSTALL_ERROR',
+        plugin: pluginId,
+        error: err.message,
+      });
+      throw err;
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   //  Hot-Swap Internals
   // ─────────────────────────────────────────────────────────────

@@ -23,6 +23,10 @@ export const PluginManager: React.FC = () => {
   const [installing, setInstalling] = useState<Record<string, InstallProgress | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const [uninstallTarget, setUninstallTarget] = useState<PluginManifest | null>(null);
+  const [keepData, setKeepData] = useState<boolean>(true);
+  const [uninstalling, setUninstalling] = useState<boolean>(false);
+
   // Verfügbare Plugins laden
   const fetchPlugins = useCallback(async () => {
     try {
@@ -42,7 +46,7 @@ export const PluginManager: React.FC = () => {
     fetchPlugins();
   }, [fetchPlugins]);
 
-  // SSE für Echtzeit-Updates (Install Progress, Plugin Load/Unload)
+  // SSE für Echtzeit-Updates (Install Progress, Plugin Load/Unload, Uninstall)
   useEffect(() => {
     const eventSource = new EventSource(`${API_BASE}/events`);
 
@@ -78,8 +82,8 @@ export const PluginManager: React.FC = () => {
               delete next[data.plugin];
               return next;
             });
-          } else if (data.action === 'LOAD') {
-            // Ein Plugin wurde aktiviert — Liste aktualisieren
+          } else if (data.action === 'LOAD' || data.action === 'UNLOAD' || data.action === 'UNINSTALL_COMPLETE') {
+            // Plugin-Status hat sich geändert — Liste aktualisieren
             fetchPlugins();
           }
         }
@@ -117,6 +121,33 @@ export const PluginManager: React.FC = () => {
         delete next[pluginId];
         return next;
       });
+    }
+  };
+
+  // Plugin deinstallieren
+  const handleConfirmUninstall = async () => {
+    if (!uninstallTarget) return;
+    const pluginId = uninstallTarget.name;
+    setUninstalling(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/system/plugins/uninstall`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pluginId, keepData }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Fehler beim Deinstallieren');
+      }
+      setUninstallTarget(null);
+      await fetchPlugins();
+    } catch (err: any) {
+      console.error('Fehler beim Deinstallieren:', err);
+      setErrors(prev => ({ ...prev, [pluginId]: err.message || 'Deinstallation fehlgeschlagen.' }));
+      setUninstallTarget(null);
+    } finally {
+      setUninstalling(false);
     }
   };
 
@@ -229,19 +260,37 @@ export const PluginManager: React.FC = () => {
                   {/* Action button */}
                   <div className="flex-shrink-0 ml-4">
                     {isInstalled ? (
-                      <span className="
-                        inline-flex items-center gap-1.5
-                        px-5 py-2.5 rounded-xl
-                        bg-emerald-50 text-emerald-700
-                        border border-emerald-200/50
-                        text-sm font-semibold
-                        cursor-default
-                      ">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        Aktiv
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="
+                          inline-flex items-center gap-1.5
+                          px-4 py-2 rounded-xl
+                          bg-emerald-50 text-emerald-700
+                          border border-emerald-200/50
+                          text-sm font-semibold
+                          cursor-default
+                        ">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Aktiv
+                        </span>
+                        <button
+                          onClick={() => {
+                            setUninstallTarget(plugin);
+                            setKeepData(true);
+                          }}
+                          className="
+                            px-3 py-2 rounded-xl
+                            text-stone-400 hover:text-rose-600
+                            hover:bg-rose-50/80 border border-transparent hover:border-rose-200/60
+                            text-xs font-medium
+                            transition-all duration-200
+                          "
+                          title="Plugin deinstallieren"
+                        >
+                          Deinstallieren
+                        </button>
+                      </div>
                     ) : isInstalling ? (
                       <span className="
                         inline-flex items-center gap-1.5
@@ -275,6 +324,81 @@ export const PluginManager: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Soft Uninstall Bestätigungsdialog (Glassmorphism) */}
+      {uninstallTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/30 backdrop-blur-sm">
+          <div className="
+            relative w-full max-w-md
+            bg-white/95 backdrop-blur-2xl
+            border border-stone-200/80
+            rounded-3xl shadow-2xl
+            p-7 flex flex-col gap-5
+          ">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-xl flex-shrink-0">
+                ⚠️
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-stone-900 tracking-tight">
+                  Plugin deinstallieren
+                </h3>
+                <p className="text-sm text-stone-500 mt-1">
+                  Möchten Sie das Modul <span className="font-semibold text-stone-700">{uninstallTarget.name}</span> wirklich entfernen?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-stone-50/90 border border-stone-200/60 rounded-2xl p-4 flex flex-col gap-2">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={keepData}
+                  onChange={(e) => setKeepData(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-400"
+                />
+                <div className="text-xs leading-relaxed text-stone-600">
+                  <span className="font-medium text-stone-800 block mb-0.5">
+                    Patientendaten im System behalten (Soft Uninstall)
+                  </span>
+                  Möchten Sie die mit diesem Plugin verknüpften Patientendaten behalten? Falls deaktiviert, werden verknüpfte Tabelleneinträge bereinigt.
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUninstallTarget(null)}
+                disabled={uninstalling}
+                className="
+                  px-4 py-2.5 rounded-xl
+                  text-stone-600 hover:text-stone-900
+                  hover:bg-stone-100 text-sm font-medium
+                  transition-colors
+                "
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUninstall}
+                disabled={uninstalling}
+                className="
+                  px-5 py-2.5 rounded-xl
+                  bg-stone-900 hover:bg-stone-800
+                  text-stone-50 text-sm font-semibold
+                  shadow-lg shadow-stone-900/15
+                  transition-all active:scale-[0.98]
+                  disabled:opacity-50
+                "
+              >
+                {uninstalling ? 'Wird deinstalliert...' : 'Deinstallieren'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

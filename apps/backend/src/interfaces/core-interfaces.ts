@@ -7,6 +7,11 @@
  * ManifestSchema definiert die Struktur der `plugin.json`.
  * Beschreibt Metadaten und Abhängigkeiten des Plugins.
  */
+export interface DependencyRef {
+  id: string;
+  name: string;
+}
+
 export interface ManifestSchema {
   name: string;
   version: string;
@@ -14,7 +19,7 @@ export interface ManifestSchema {
   author?: string;
   icon?: string;       // Emoji als visueller Indikator im Plugin-Store
   category?: string;   // z.B. "Patientenmanagement", "Diagnostik"
-  dependencies?: Record<string, string>;
+  dependencies?: DependencyRef[];
   entry: string;
 }
 
@@ -50,5 +55,12 @@ export interface IPlugin {
    * Seed-Daten oder Konfigurationen anlegen.
    */
   onInstall?(reportProgress: InstallProgressCallback): Promise<void>;
+
+  /**
+   * Optionale Deinstallationsroutine. Wird aufgerufen, bevor das Plugin
+   * vom System entfernt wird.
+   * @param keepData Wenn true, bleiben gespeicherte Daten/Tabellen erhalten (Soft Uninstall).
+   */
+  onUninstall?(keepData: boolean): Promise<void>;
 }
 

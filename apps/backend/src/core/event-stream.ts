@@ -26,9 +26,10 @@ export function startEventServer(port: number = 4000) {
       return;
     }
 
-    const methodAndPath = `${req.method} ${req.url}`;
+    const urlPath = req.url?.split('?')[0];
+    const methodAndPath = `${req.method} ${urlPath}`;
 
-    if (req.url === '/api/events') {
+    if (urlPath === '/api/events') {
       // Setze zwingende SSE-Header
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
