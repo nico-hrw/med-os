@@ -1,0 +1,6 @@
+{
+  "name": "patient-onboarding",
+  "version": "1.0.0",
+  "description": "Verwaltet die Patientenaufnahme, KYC-Verifizierung und Triage.",
+  "entry": "index.ts"
+}
