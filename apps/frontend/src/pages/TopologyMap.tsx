@@ -94,13 +94,13 @@ export const TopologyMap: React.FC = () => {
   }, [setEdges]);
 
   return (
-    <div className="relative w-full h-full bg-[#fcfbf9] rounded-3xl overflow-hidden border border-stone-200 shadow-sm flex flex-col">
+    <div className="relative w-full h-full min-h-[600px] bg-[#fcfbf9] rounded-3xl overflow-hidden border border-stone-200 shadow-sm flex flex-col">
       <div className="absolute top-6 left-8 z-10">
         <h2 className="text-2xl font-serif text-stone-900">System-Topologie</h2>
         <p className="text-stone-500 text-sm mt-1">Interaktive Architektur-Dokumentation</p>
       </div>
 
-      <div className="w-full h-full relative">
+      <div className="w-full h-full min-h-[500px] relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
