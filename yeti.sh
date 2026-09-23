@@ -12,6 +12,7 @@ FRONTEND_DIR="$ROOT_DIR/apps/frontend"
 
 echo "🔄 Prüfe auf Code-Updates..."
 cd "$ROOT_DIR" || exit 1
+git checkout -- . 2>/dev/null || true
 git pull origin main
 
 cleanup() {
@@ -46,9 +47,9 @@ start_backend() {
 }
 
 start_frontend() {
-    echo "🚀 Starte medOS Frontend (Vite) via PM2..."
+    echo "🚀 Starte medOS Frontend (Production Preview) via PM2..."
     cd "$FRONTEND_DIR" || exit 1
-    pm2 start "npm run dev" --name "yeti-frontend"
+    pm2 start "npm run preview" --name "yeti-frontend"
     pm2 save
     echo "✅ Frontend aktiv (Port 5173)"
 }
