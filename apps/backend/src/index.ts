@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { PluginLoader } from './core/plugin-loader';
 import { startEventServer } from './core/event-stream';
+import { DatabaseService } from './core/db';
 
 async function bootstrap() {
   console.log('🏔️  MedOS Yeti Kernel initialisiert...');
@@ -11,6 +12,10 @@ async function bootstrap() {
   const pluginsDir = path.resolve(__dirname, '../../../plugins');
   
   const loader = new PluginLoader(pluginsDir);
+  
+  // Register database service
+  loader.registerService('db', DatabaseService.getClient());
+  
   loader.watch();
 
   console.log('🏔️  MedOS Yeti Kernel aktiv. Warte auf Modul-Ereignisse...');

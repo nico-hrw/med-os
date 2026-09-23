@@ -6,10 +6,12 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.4.0",
     "chokidar": "^3.6.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "prisma": "^6.4.0",
     "tsx": "^4.23.13",
     "typescript": "^5.4.2"
   }

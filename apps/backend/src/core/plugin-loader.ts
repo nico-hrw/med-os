@@ -25,7 +25,8 @@ class KernelContext implements PluginContext {
 
   registerRoute(routePath: string, handler: unknown): void {
     console.log(`[Kernel] Route registriert: ${routePath}`);
-    // HTTP Router Implementierung folgt (z.B. mit Express/Fastify)
+    const { registerApiRoute } = require('./event-stream');
+    registerApiRoute(routePath, handler as Function);
   }
 }
 
@@ -45,6 +46,13 @@ export class PluginLoader {
   private watcher?: chokidar.FSWatcher;
 
   constructor(private pluginsDir: string) {}
+
+  /**
+   * Registriert einen globalen Service im Kernel-Kontext.
+   */
+  public registerService(name: string, service: unknown): void {
+    this.context.registerService(name, service);
+  }
 
   /**
    * Startet den Watcher für das Hot-Swapping im definierten Plugin-Ordner.
