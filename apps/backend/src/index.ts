@@ -63,6 +63,7 @@ async function bootstrap() {
         icon: p.manifest.icon,
         category: p.manifest.category,
         dependencies: p.manifest.dependencies || [],
+        routes: p.manifest.routes || [],
       }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, data: active }));

@@ -1,7 +1,7 @@
 {
   "name": "patient-onboarding",
   "version": "1.0.0",
-  "description": "Verwaltet die Patientenaufnahme, KYC-Verifizierung und Triage.",
+  "description": "Das Modul 'Patienten-Onboarding' bildet die digitale Eingangspforte für die strukturierte Erstaufnahme von Patientinnen und Patienten in der Notfall- und Regelversorgung. Es automatisiert die Erfassung biometrischer Stammdaten, führt eine automatisierte Vorab-Triage nach dem Manchester-Triage-System durch und validiert die gesetzlichen Identitäts- und Versicherungsnachweise. Über eine gesicherte Schnittstelle werden alle Falldaten verschlüsselt an die zentrale Datenbank übermittelt und nachgelagerten klinischen Stationen in Echtzeit bereitgestellt. Das Modul richtet sich speziell an das medizinische Fachpersonal am Empfang sowie den triageverantwortlichen Pflegedienst zur drastischen Verkürzung der Aufnahmezeiten. Durch die nahtlose Einbindung in die MedOS-Architektur wird eine unterbrechungsfreie Dokumentationskette vom ersten Kontakt bis zur weiteren Behandlung sichergestellt.",
   "author": "MedOS Team",
   "icon": "🏥",
   "category": "Patientenmanagement",
@@ -10,6 +10,16 @@
     {
       "id": "database-core",
       "name": "Zentrale Datenbank"
+    }
+  ],
+  "routes": [
+    {
+      "name": "Patienten-Formular",
+      "path": "/yeti/patient"
+    },
+    {
+      "name": "Empfangs-Dashboard",
+      "path": "/yeti/reception"
     }
   ]
 }

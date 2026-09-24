@@ -6,10 +6,13 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
   const isHorizontal = direction === 'LR';
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 90 });
+  const nodeWidth = 340;
+  const nodeHeight = 170;
+
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 100, ranksep: 130 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 300, height: 90 });
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
   edges.forEach((edge) => {
@@ -24,8 +27,8 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
     node.sourcePosition = isHorizontal ? Position.Right : Position.Bottom;
 
     node.position = {
-      x: nodeWithPosition.x - 280 / 2,
-      y: nodeWithPosition.y - 70 / 2,
+      x: nodeWithPosition.x - nodeWidth / 2,
+      y: nodeWithPosition.y - nodeHeight / 2,
     };
   });
 

@@ -12,6 +12,11 @@ export interface DependencyRef {
   name: string;
 }
 
+export interface RouteRef {
+  name: string;
+  path: string;
+}
+
 export interface ManifestSchema {
   name: string;
   version: string;
@@ -20,6 +25,7 @@ export interface ManifestSchema {
   icon?: string;       // Emoji als visueller Indikator im Plugin-Store
   category?: string;   // z.B. "Patientenmanagement", "Diagnostik"
   dependencies?: DependencyRef[];
+  routes?: RouteRef[];
   entry: string;
 }
 

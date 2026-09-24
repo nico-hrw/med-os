@@ -15,6 +15,11 @@ import { CustomNode, CustomNodeData } from '../components/topology/CustomNode';
 import { InfoPanel } from '../components/topology/InfoPanel';
 import { getLayoutedElements } from '../components/topology/layout';
 
+interface PluginRoute {
+  name: string;
+  path: string;
+}
+
 interface ActivePlugin {
   name: string;
   version: string;
@@ -23,6 +28,7 @@ interface ActivePlugin {
   icon?: string;
   category?: string;
   dependencies?: { id: string; name: string }[];
+  routes?: PluginRoute[];
 }
 
 interface AvailablePlugin {
@@ -33,6 +39,7 @@ interface AvailablePlugin {
   icon?: string;
   category?: string;
   dependencies?: { id: string; name: string }[];
+  routes?: PluginRoute[];
   installed: boolean;
 }
 
@@ -83,6 +90,7 @@ export const TopologyMap: React.FC = () => {
           description: plugin.description || 'Aktives Systemmodul.',
           technicalId: plugin.name,
           version: plugin.version,
+          routes: plugin.routes,
           concept: plugin.category 
             ? `Kategorie: ${plugin.category} | Version: v${plugin.version}` 
             : `Version: v${plugin.version}`,
@@ -132,6 +140,7 @@ export const TopologyMap: React.FC = () => {
                     description: storePlugin.description || 'Im Plugin-Store verfügbar.',
                     technicalId: dep.id,
                     version: storePlugin.version,
+                    routes: storePlugin.routes,
                     concept: `Verfügbare Erweiterung im Store. Wird benötigt von '${plugin.name}'.`,
                     storePluginId: dep.id,
                   },

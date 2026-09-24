@@ -84,8 +84,42 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ nodeData, onClose }) => {
                 ID: {nodeData.technicalId}
               </div>
             )}
-            <div className="mt-4 text-stone-500 text-sm font-sans leading-relaxed">{nodeData.description}</div>
+            <div className="mt-4 text-stone-600 text-sm font-sans leading-relaxed whitespace-pre-line">
+              {nodeData.description}
+            </div>
           </div>
+
+          {/* Bereitgestellte Routen */}
+          {nodeData.routes && nodeData.routes.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-xs uppercase tracking-widest text-stone-400 font-semibold mb-3 font-sans">
+                Bereitgestellte Routen (URLs)
+              </h3>
+              <div className="flex flex-col gap-2">
+                {nodeData.routes.map((route, idx) => (
+                  <a
+                    key={idx}
+                    href={route.path}
+                    className="
+                      flex items-center justify-between p-3.5 rounded-2xl
+                      bg-stone-50/90 hover:bg-stone-100/90 border border-stone-200/70
+                      transition-all duration-200 group
+                    "
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-sm">📍</span>
+                      <span className="text-sm font-semibold text-stone-800 group-hover:text-stone-950">
+                        {route.name}
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs text-stone-500 group-hover:text-stone-700 bg-white/80 px-2 py-0.5 rounded-md border border-stone-200/50">
+                      {route.path} ↗
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="h-px w-full bg-gradient-to-r from-stone-200 via-stone-200/80 to-transparent my-8" />
 

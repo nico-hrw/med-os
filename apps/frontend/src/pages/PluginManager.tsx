@@ -1,4 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+
+interface PluginRoute {
+  name: string;
+  path: string;
+}
 
 interface PluginManifest {
   name: string;
@@ -7,6 +13,8 @@ interface PluginManifest {
   author?: string;
   icon?: string;
   category?: string;
+  dependencies?: { id: string; name: string }[];
+  routes?: PluginRoute[];
   installed: boolean;
 }
 
@@ -92,7 +100,9 @@ export const PluginManager: React.FC = () => {
       }
     };
 
-    return () => eventSource.close();
+    return () => {
+      eventSource.close();
+    };
   }, [fetchPlugins]);
 
   // Plugin installieren
@@ -226,14 +236,45 @@ export const PluginManager: React.FC = () => {
                       )}
                     </div>
 
-                    <p className="text-stone-500 text-sm leading-relaxed mb-1">
+                    <p className="text-stone-600 text-sm leading-relaxed mb-3 whitespace-pre-line">
                       {plugin.description || 'Keine Beschreibung verfügbar.'}
                     </p>
 
                     {plugin.author && (
-                      <p className="text-xs text-stone-400">
-                        von <span className="font-medium">{plugin.author}</span>
+                      <p className="text-xs text-stone-400 mb-2">
+                        von <span className="font-medium text-stone-600">{plugin.author}</span>
                       </p>
+                    )}
+
+                    {/* Bereitgestellte Routen */}
+                    {plugin.routes && plugin.routes.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-stone-200/50">
+                        <span className="text-xs uppercase tracking-wider font-semibold text-stone-500 block mb-2">
+                          Bereitgestellte Routen:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {plugin.routes.map((route, idx) => (
+                            <Link
+                              key={idx}
+                              to={route.path.startsWith('/yeti') ? route.path.replace(/^\/yeti/, '') || '/' : route.path}
+                              className="
+                                inline-flex items-center gap-1.5
+                                px-3 py-1.5 rounded-xl
+                                bg-white/80 hover:bg-white
+                                backdrop-blur-sm
+                                border border-stone-200/80 hover:border-stone-300
+                                text-xs font-medium text-stone-700 hover:text-stone-950
+                                shadow-sm hover:shadow
+                                transition-all duration-150 group
+                              "
+                            >
+                              <span className="text-stone-400 group-hover:text-stone-600">📍</span>
+                              <span className="font-semibold">{route.name}</span>
+                              <span className="font-mono text-[10px] text-stone-400">({route.path})</span>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* Progress message */}
