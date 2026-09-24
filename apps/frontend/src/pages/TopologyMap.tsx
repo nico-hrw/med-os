@@ -14,6 +14,7 @@ import 'reactflow/dist/style.css';
 import { CustomNode, CustomNodeData } from '../components/topology/CustomNode';
 import { InfoPanel } from '../components/topology/InfoPanel';
 import { getLayoutedElements } from '../components/topology/layout';
+import { useKernelEvents } from '../context/EventContext';
 
 interface PluginRoute {
   name: string;
@@ -209,37 +210,20 @@ export const TopologyMap: React.FC = () => {
     fetchTopologyData();
   }, [fetchTopologyData]);
 
-  // Live-Synchronisation über SSE
-  useEffect(() => {
-    const eventSource = new EventSource(`${API_BASE}/events`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'PLUGIN_UPDATE') {
-          // Re-fetch Topologie bei Modulwechseln
-          if (
-            data.action === 'LOAD' || 
-            data.action === 'UNLOAD' || 
-            data.action === 'INSTALL_COMPLETE' || 
-            data.action === 'UNINSTALL_COMPLETE'
-          ) {
-            fetchTopologyData();
-          }
-        }
-      } catch (err) {
-        console.error('Fehler beim Parsen der SSE-Nachricht in Topology:', err);
+  // Live-Synchronisation über zentralen SSE-Stream
+  useKernelEvents(useCallback((data: any) => {
+    if (data.type === 'PLUGIN_UPDATE') {
+      // Re-fetch Topologie bei Modulwechseln
+      if (
+        data.action === 'LOAD' || 
+        data.action === 'UNLOAD' || 
+        data.action === 'INSTALL_COMPLETE' || 
+        data.action === 'UNINSTALL_COMPLETE'
+      ) {
+        fetchTopologyData();
       }
-    };
-
-    eventSource.onerror = () => {
-      console.warn('Topology SSE Verbindungsabbruch. Native Browser-API versucht Reconnect...');
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [fetchTopologyData]);
+    }
+  }, [fetchTopologyData]));
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedNodeData(node.data as CustomNodeData);

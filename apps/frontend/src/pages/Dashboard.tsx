@@ -1,33 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useKernelEvents } from '../context/EventContext';
 
 export const Dashboard: React.FC = () => {
-  const [activeModules, setActiveModules] = useState<number>(0);
-
-  useEffect(() => {
-    // SSE Verbindung aufbauen
-    const eventSource = new EventSource('/yeti/api/events');
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'PLUGIN_UPDATE') {
-          setActiveModules(data.activeCount);
-        } else if (data.type === 'CONNECTED') {
-          console.log('Echtzeitverbindung zum MedOS Yeti Kernel hergestellt.');
-        }
-      } catch (err) {
-        console.error('Fehler beim Parsen der SSE-Nachricht:', err);
-      }
-    };
-
-    eventSource.onerror = () => {
-      console.warn('SSE Verbindungsabbruch. Native Browser-API versucht automatischen Reconnect...');
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, []);
+  const { activeModules } = useKernelEvents();
 
   return (
     <div className="max-w-5xl mx-auto mt-4">

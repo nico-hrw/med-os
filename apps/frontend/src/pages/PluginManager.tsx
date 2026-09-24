@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useKernelEvents } from '../context/EventContext';
 
 interface PluginRoute {
   name: string;
@@ -55,55 +56,41 @@ export const PluginManager: React.FC = () => {
   }, [fetchPlugins]);
 
   // SSE für Echtzeit-Updates (Install Progress, Plugin Load/Unload, Uninstall)
-  useEffect(() => {
-    const eventSource = new EventSource(`${API_BASE}/events`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'PLUGIN_UPDATE') {
-          if (data.action === 'INSTALL_PROGRESS') {
-            setInstalling(prev => ({
-              ...prev,
-              [data.plugin]: { message: data.message, percent: data.percent },
-            }));
-          } else if (data.action === 'INSTALL_COMPLETE') {
-            // Installation abgeschlossen — kurz den Fortschrittsbalken bei 100% zeigen
-            setInstalling(prev => ({
-              ...prev,
-              [data.plugin]: { message: data.message, percent: 100 },
-            }));
-            // Nach kurzer Verzögerung aufräumen und Plugin-Liste aktualisieren
-            setTimeout(() => {
-              setInstalling(prev => {
-                const next = { ...prev };
-                delete next[data.plugin];
-                return next;
-              });
-              fetchPlugins();
-            }, 1500);
-          } else if (data.action === 'INSTALL_ERROR') {
-            setErrors(prev => ({ ...prev, [data.plugin]: data.error }));
-            setInstalling(prev => {
-              const next = { ...prev };
-              delete next[data.plugin];
-              return next;
-            });
-          } else if (data.action === 'LOAD' || data.action === 'UNLOAD' || data.action === 'UNINSTALL_COMPLETE') {
-            // Plugin-Status hat sich geändert — Liste aktualisieren
-            fetchPlugins();
-          }
-        }
-      } catch (err) {
-        console.error('SSE Parse-Fehler:', err);
+  useKernelEvents(useCallback((data: any) => {
+    if (data.type === 'PLUGIN_UPDATE') {
+      if (data.action === 'INSTALL_PROGRESS') {
+        setInstalling(prev => ({
+          ...prev,
+          [data.plugin]: { message: data.message, percent: data.percent },
+        }));
+      } else if (data.action === 'INSTALL_COMPLETE') {
+        // Installation abgeschlossen — kurz den Fortschrittsbalken bei 100% zeigen
+        setInstalling(prev => ({
+          ...prev,
+          [data.plugin]: { message: data.message, percent: 100 },
+        }));
+        // Nach kurzer Verzögerung aufräumen und Plugin-Liste aktualisieren
+        setTimeout(() => {
+          setInstalling(prev => {
+            const next = { ...prev };
+            delete next[data.plugin];
+            return next;
+          });
+          fetchPlugins();
+        }, 1500);
+      } else if (data.action === 'INSTALL_ERROR') {
+        setErrors(prev => ({ ...prev, [data.plugin]: data.error }));
+        setInstalling(prev => {
+          const next = { ...prev };
+          delete next[data.plugin];
+          return next;
+        });
+      } else if (data.action === 'LOAD' || data.action === 'UNLOAD' || data.action === 'UNINSTALL_COMPLETE') {
+        // Plugin-Status hat sich geändert — Liste aktualisieren
+        fetchPlugins();
       }
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [fetchPlugins]);
+    }
+  }, [fetchPlugins]));
 
   // Plugin installieren
   const handleInstall = async (pluginId: string) => {

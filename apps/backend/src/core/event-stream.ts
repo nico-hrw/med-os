@@ -33,8 +33,9 @@ export function startEventServer(port: number = 4000) {
       // Setze zwingende SSE-Header
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
       });
 
       // Sende ein initiales CONNECTED-Event
@@ -45,6 +46,11 @@ export function startEventServer(port: number = 4000) {
 
       req.on('close', () => {
         clients.delete(res);
+        try {
+          res.end();
+        } catch {
+          // Verbindung bereits geschlossen
+        }
       });
     } else if (apiRoutes.has(methodAndPath)) {
       const handler = apiRoutes.get(methodAndPath);
@@ -68,6 +74,10 @@ export function startEventServer(port: number = 4000) {
 export function broadcastEvent(type: string, data: any) {
   const payload = `data: ${JSON.stringify({ type, ...data })}\n\n`;
   for (const client of clients) {
-    client.write(payload);
+    try {
+      client.write(payload);
+    } catch {
+      clients.delete(client);
+    }
   }
 }
