@@ -85,8 +85,15 @@ async function bootstrap() {
 
   registerApiRoute('POST /api/system/plugins/install', async (req: any, res: any) => {
     try {
-      const body = await parseJsonBody(req);
-      const pluginId = body.pluginId;
+      const url = new URL(req.url, 'http://localhost');
+      const queryPluginId = url.searchParams.get('pluginId');
+
+      let body: any = {};
+      try {
+        body = await parseJsonBody(req);
+      } catch { /* optionaler Body */ }
+
+      const pluginId = body.pluginId || queryPluginId;
 
       if (!pluginId || typeof pluginId !== 'string') {
         sendJsonResponse(res, 400, { error: 'pluginId ist erforderlich.' });
