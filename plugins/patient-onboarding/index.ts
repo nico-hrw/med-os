@@ -8,6 +8,7 @@ function delay(ms: number): Promise<void> {
 
 export default class PatientOnboardingPlugin implements IPlugin {
   private context?: PluginContext;
+  private memoryPatients: any[] = [];
 
   /**
    * Simulierte Installationsroutine mit Fortschrittsmeldungen.
@@ -39,8 +40,7 @@ export default class PatientOnboardingPlugin implements IPlugin {
     
     const db = this.context?.getService<PluginDBProxy>('db');
     if (!db) {
-      console.error('[Patienten-Onboarding] Kritischer Fehler: DB Service nicht gefunden!');
-      return;
+      console.warn('[Patienten-Onboarding] DB-Service nicht verfügbar — nutze In-Memory-Speicher.');
     }
 
     // POST Route — Neuen Patienten aufnehmen
@@ -58,10 +58,22 @@ export default class PatientOnboardingPlugin implements IPlugin {
           });
         }
 
-        const newEntry = await db.create({
-          key: `patient_${Date.now()}`,
-          payload: JSON.stringify(payload),
-        });
+        let newEntry: any;
+        if (db) {
+          newEntry = await db.create({
+            key: `patient_${Date.now()}`,
+            payload: JSON.stringify(payload),
+          });
+        } else {
+          newEntry = {
+            id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            pluginName: 'patient-onboarding',
+            key: `patient_${Date.now()}`,
+            payload: JSON.stringify(payload),
+            createdAt: new Date().toISOString(),
+          };
+          this.memoryPatients.unshift(newEntry);
+        }
 
         broadcastEvent('NEW_PATIENT', { data: newEntry });
         
@@ -77,7 +89,12 @@ export default class PatientOnboardingPlugin implements IPlugin {
     // GET Route — Alle Patienten auflisten
     this.context?.registerRoute('GET /api/onboarding/list', async (_req: any, res: any) => {
       try {
-        const patients = await db.findMany({ orderBy: { createdAt: 'desc' } });
+        let patients: any[] = [];
+        if (db) {
+          patients = await db.findMany({ orderBy: { createdAt: 'desc' } });
+        } else {
+          patients = this.memoryPatients;
+        }
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, data: patients }));

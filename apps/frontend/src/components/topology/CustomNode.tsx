@@ -58,95 +58,69 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected
     <div 
       title={tooltipText}
       className={`
-        px-5 py-4 rounded-2xl border backdrop-blur-md transition-all duration-300
-        min-w-[260px] max-w-[360px]
+        w-[280px] h-[140px] p-4 rounded-2xl border backdrop-blur-md transition-all duration-200
+        flex flex-col justify-between overflow-hidden cursor-pointer select-none
         ${statusColors[data.status]} 
-        ${selected ? 'ring-2 ring-amber-400 shadow-xl scale-105 z-50' : 'shadow-sm hover:shadow-md'}
+        ${selected ? 'ring-2 ring-amber-400 shadow-xl scale-[1.03] z-50' : 'shadow-xs hover:shadow-md hover:scale-[1.01]'}
       `}
     >
       <Handle type="target" position={Position.Top} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
       <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
 
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`w-2.5 h-2.5 rounded-full ${statusDotColors[data.status]} shadow-sm flex-shrink-0`} />
-            <span className="font-serif font-medium tracking-wide text-sm truncate">
-              {data.label}
-            </span>
-          </div>
-
-          {/* Badges */}
-          {data.status === 'kernel' && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700 flex-shrink-0">
-              Core
-            </span>
-          )}
-          {data.status === 'active' && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex-shrink-0">
-              Aktiv
-            </span>
-          )}
-          {data.status === 'missing-warning' && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 flex-shrink-0">
-              ⚠️ Fehlt
-            </span>
-          )}
-          {data.status === 'store-available' && (
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 flex-shrink-0">
-              Store
-            </span>
-          )}
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`w-2.5 h-2.5 rounded-full ${statusDotColors[data.status]} shadow-xs flex-shrink-0`} />
+          <span className="font-serif font-medium tracking-wide text-sm truncate">
+            {data.label}
+          </span>
         </div>
 
-        {/* Vollständige Beschreibung ohne Kürzung */}
-        {data.description && (
-          <p className={`text-xs leading-relaxed ${data.status === 'kernel' ? 'text-stone-300' : 'text-stone-600'}`}>
-            {data.description}
-          </p>
+        {/* Badges */}
+        {data.status === 'kernel' && (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700 flex-shrink-0">
+            Core
+          </span>
         )}
-
-        {/* Bereitgestellte Routen im Knoten */}
-        {data.routes && data.routes.length > 0 && (
-          <div className="pt-2 border-t border-stone-200/50 flex flex-wrap gap-1.5 mt-0.5">
-            {data.routes.map((r, i) => (
-              <Link
-                key={i}
-                to={r.path.startsWith('/yeti') ? r.path.replace(/^\/yeti/, '') || '/' : r.path}
-                onClick={(e) => e.stopPropagation()}
-                className="
-                  text-[10px] font-medium 
-                  bg-white/80 hover:bg-white 
-                  text-stone-700 hover:text-stone-950
-                  px-2 py-1 rounded-md border border-stone-200 
-                  shadow-xs flex items-center gap-1 transition-all
-                "
-              >
-                <span>📍</span>
-                <span>{r.name}</span>
-              </Link>
-            ))}
-          </div>
+        {data.status === 'active' && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex-shrink-0">
+            Aktiv
+          </span>
         )}
-
-        {/* Store Action Button für store-available */}
+        {data.status === 'missing-warning' && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 flex-shrink-0">
+            ⚠️ Fehlt
+          </span>
+        )}
         {data.status === 'store-available' && (
-          <div className="pt-2 border-t border-stone-200/60 mt-0.5">
-            <Link
-              to="/plugins"
-              className="
-                inline-flex items-center gap-1.5 text-xs font-semibold
-                text-stone-900 bg-white hover:bg-stone-50
-                px-3 py-1.5 rounded-lg border border-stone-300 shadow-sm
-                transition-all active:scale-[0.98]
-              "
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span>🛒</span>
-              Aus dem Store installieren
-            </Link>
-          </div>
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 flex-shrink-0">
+            Store
+          </span>
         )}
+      </div>
+
+      {/* Kurze 2-zeilige Beschreibung */}
+      <p className={`text-xs leading-relaxed line-clamp-2 my-auto ${data.status === 'kernel' ? 'text-stone-300' : 'text-stone-600'}`}>
+        {data.description || 'Keine Beschreibung verfügbar.'}
+      </p>
+
+      {/* Footer / Metadaten-Leiste */}
+      <div className="flex items-center justify-between pt-2 border-t border-stone-200/50 text-[10px]">
+        {data.routes && data.routes.length > 0 ? (
+          <span className="font-medium text-stone-500 flex items-center gap-1">
+            <span>📍</span>
+            <span>{data.routes.length} Route{data.routes.length > 1 ? 'n' : ''}</span>
+          </span>
+        ) : data.version ? (
+          <span className="font-mono text-stone-400">v{data.version}</span>
+        ) : (
+          <span className="text-stone-400">Systemmodul</span>
+        )}
+
+        <span className={`font-medium ${data.status === 'kernel' ? 'text-stone-300' : 'text-stone-500'} flex items-center gap-0.5`}>
+          <span>Details</span>
+          <span>↗</span>
+        </span>
       </div>
 
       <Handle type="source" position={Position.Bottom} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />

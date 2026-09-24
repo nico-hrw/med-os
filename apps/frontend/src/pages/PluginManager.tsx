@@ -35,6 +35,7 @@ export const PluginManager: React.FC = () => {
   const [uninstallTarget, setUninstallTarget] = useState<PluginManifest | null>(null);
   const [keepData, setKeepData] = useState<boolean>(true);
   const [uninstalling, setUninstalling] = useState<boolean>(false);
+  const [selectedPlugin, setSelectedPlugin] = useState<PluginManifest | null>(null);
 
   // Verfügbare Plugins laden
   const fetchPlugins = useCallback(async () => {
@@ -169,7 +170,7 @@ export const PluginManager: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {plugins.map((plugin) => {
             const progress = installing[plugin.name];
             const error = errors[plugin.name];
@@ -179,21 +180,22 @@ export const PluginManager: React.FC = () => {
             return (
               <div
                 key={plugin.name}
+                onClick={() => setSelectedPlugin(plugin)}
                 className="
                   relative overflow-hidden
-                  bg-gradient-to-br from-white/70 to-white/40
+                  bg-gradient-to-br from-white/80 to-white/50
                   backdrop-blur-xl
-                  border border-stone-200/50
-                  rounded-2xl
-                  shadow-[0_4px_24px_rgba(0,0,0,0.03)]
-                  transition-all duration-300
-                  hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)]
-                  hover:border-stone-300/60
+                  border border-stone-200/60 hover:border-stone-300
+                  rounded-3xl
+                  h-[260px] p-6
+                  flex flex-col justify-between
+                  shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.07)]
+                  transition-all duration-200 cursor-pointer group select-none
                 "
               >
-                {/* Progress bar — positioned at the very bottom of the card */}
+                {/* Progress bar at top edge */}
                 {isInstalling && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-stone-100">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-stone-100">
                     <div
                       className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out"
                       style={{ width: `${progress.percent}%` }}
@@ -201,147 +203,69 @@ export const PluginManager: React.FC = () => {
                   </div>
                 )}
 
-                <div className="p-8 flex items-start gap-6">
-                  {/* Icon */}
-                  <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-stone-50 to-stone-100 border border-stone-200/50 flex items-center justify-center text-2xl shadow-sm">
-                    {plugin.icon || '🧩'}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-lg font-semibold text-stone-800 tracking-tight">
-                        {plugin.name}
-                      </h3>
-                      <span className="text-xs font-mono text-stone-400 bg-stone-100/80 px-2 py-0.5 rounded-full">
+                {/* Card Top / Header */}
+                <div>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-stone-100/90 border border-stone-200/60 flex items-center justify-center text-2xl flex-shrink-0 shadow-xs">
+                      {plugin.icon || '🧩'}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">
                         v{plugin.version}
                       </span>
                       {plugin.category && (
-                        <span className="text-xs text-stone-500 bg-stone-100/50 px-2.5 py-0.5 rounded-full border border-stone-200/30">
+                        <span className="text-[10px] text-stone-600 bg-stone-100/70 px-2 py-0.5 rounded-full border border-stone-200/40">
                           {plugin.category}
                         </span>
                       )}
                     </div>
+                  </div>
 
-                    <p className="text-stone-600 text-sm leading-relaxed mb-3 whitespace-pre-line">
-                      {plugin.description || 'Keine Beschreibung verfügbar.'}
+                  <h3 className="text-base font-semibold text-stone-900 group-hover:text-stone-950 tracking-tight truncate">
+                    {plugin.name}
+                  </h3>
+
+                  {/* Kurze 2-zeilige Beschreibung */}
+                  <p className="text-stone-500 text-xs leading-relaxed mt-2 line-clamp-2">
+                    {plugin.description || 'Keine Beschreibung verfügbar.'}
+                  </p>
+
+                  {/* Fehleranzeige inline */}
+                  {error && (
+                    <p className="text-[11px] text-red-600 mt-1.5 truncate">
+                      ⚠️ {error}
                     </p>
+                  )}
+                </div>
 
-                    {plugin.author && (
-                      <p className="text-xs text-stone-400 mb-2">
-                        von <span className="font-medium text-stone-600">{plugin.author}</span>
-                      </p>
-                    )}
-
-                    {/* Bereitgestellte Routen */}
-                    {plugin.routes && plugin.routes.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-stone-200/50">
-                        <span className="text-xs uppercase tracking-wider font-semibold text-stone-500 block mb-2">
-                          Bereitgestellte Routen:
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {plugin.routes.map((route, idx) => (
-                            <Link
-                              key={idx}
-                              to={route.path.startsWith('/yeti') ? route.path.replace(/^\/yeti/, '') || '/' : route.path}
-                              className="
-                                inline-flex items-center gap-1.5
-                                px-3 py-1.5 rounded-xl
-                                bg-white/80 hover:bg-white
-                                backdrop-blur-sm
-                                border border-stone-200/80 hover:border-stone-300
-                                text-xs font-medium text-stone-700 hover:text-stone-950
-                                shadow-sm hover:shadow
-                                transition-all duration-150 group
-                              "
-                            >
-                              <span className="text-stone-400 group-hover:text-stone-600">📍</span>
-                              <span className="font-semibold">{route.name}</span>
-                              <span className="font-mono text-[10px] text-stone-400">({route.path})</span>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Progress message */}
-                    {isInstalling && progress.message && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <div className="w-3.5 h-3.5 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                        <span className="text-sm text-emerald-700 font-medium">
-                          {progress.message}
-                        </span>
-                        <span className="text-xs text-stone-400 ml-auto tabular-nums">
-                          {progress.percent}%
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Error message */}
-                    {error && (
-                      <div className="mt-3 px-3 py-2 bg-red-50/80 border border-red-200/50 rounded-xl">
-                        <p className="text-sm text-red-600">{error}</p>
-                      </div>
+                {/* Card Footer */}
+                <div className="pt-3 border-t border-stone-200/50 flex items-center justify-between mt-auto">
+                  <div className="text-[11px] text-stone-400 font-medium flex items-center gap-1">
+                    {plugin.routes && plugin.routes.length > 0 ? (
+                      <span className="text-stone-500">📍 {plugin.routes.length} Route{plugin.routes.length > 1 ? 'n' : ''}</span>
+                    ) : (
+                      <span>Details ↗</span>
                     )}
                   </div>
 
-                  {/* Action button */}
-                  <div className="flex-shrink-0 ml-4">
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {isInstalled ? (
-                      <div className="flex items-center gap-2">
-                        <span className="
-                          inline-flex items-center gap-1.5
-                          px-4 py-2 rounded-xl
-                          bg-emerald-50 text-emerald-700
-                          border border-emerald-200/50
-                          text-sm font-semibold
-                          cursor-default
-                        ">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          Aktiv
-                        </span>
-                        <button
-                          onClick={() => {
-                            setUninstallTarget(plugin);
-                            setKeepData(true);
-                          }}
-                          className="
-                            px-3 py-2 rounded-xl
-                            text-stone-400 hover:text-rose-600
-                            hover:bg-rose-50/80 border border-transparent hover:border-rose-200/60
-                            text-xs font-medium
-                            transition-all duration-200
-                          "
-                          title="Plugin deinstallieren"
-                        >
-                          Deinstallieren
-                        </button>
-                      </div>
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200/60 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Aktiv
+                      </span>
                     ) : isInstalling ? (
-                      <span className="
-                        inline-flex items-center gap-1.5
-                        px-5 py-2.5 rounded-xl
-                        bg-stone-100 text-stone-400
-                        border border-stone-200/50
-                        text-sm font-semibold
-                        cursor-wait
-                      ">
-                        Installiert...
+                      <span className="text-xs font-semibold text-stone-400 bg-stone-100 px-2.5 py-1 rounded-xl">
+                        {progress.percent}%
                       </span>
                     ) : (
                       <button
                         onClick={() => handleInstall(plugin.name)}
                         className="
-                          px-5 py-2.5 rounded-xl
-                          bg-stone-900 text-stone-50
-                          text-sm font-semibold
-                          shadow-lg shadow-stone-900/15
-                          hover:bg-stone-800
-                          hover:shadow-xl hover:shadow-stone-900/20
-                          active:scale-[0.97]
-                          transition-all duration-200
+                          px-3.5 py-1.5 rounded-xl
+                          bg-stone-900 text-stone-50 text-xs font-semibold
+                          shadow-md shadow-stone-900/10 hover:bg-stone-800
+                          active:scale-95 transition-all
                         "
                       >
                         Installieren
@@ -352,6 +276,160 @@ export const PluginManager: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Von rechts einfliegende Detail-Seite (Slide-over Drawer) */}
+      {selectedPlugin && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-stone-900/25 backdrop-blur-xs transition-opacity"
+            onClick={() => setSelectedPlugin(null)}
+          />
+
+          {/* Slide-in Panel */}
+          <div className="
+            relative w-full max-w-lg bg-white/95 backdrop-blur-2xl
+            border-l border-stone-200/80 shadow-2xl h-full p-8 overflow-y-auto
+            flex flex-col z-50 animate-in slide-in-from-right duration-300
+          ">
+            <button
+              onClick={() => setSelectedPlugin(null)}
+              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 flex items-center justify-center text-xs transition-colors"
+            >
+              ✕
+            </button>
+
+            <div className="flex items-start gap-4 mb-6 mt-2">
+              <div className="w-16 h-16 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-3xl shadow-xs flex-shrink-0">
+                {selectedPlugin.icon || '🧩'}
+              </div>
+              <div className="flex-1 min-w-0 pr-8">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold font-mono block">
+                  Plugin Spezifikation
+                </span>
+                <h2 className="text-2xl font-serif text-stone-900 tracking-tight mt-0.5 truncate">
+                  {selectedPlugin.name}
+                </h2>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-xs font-mono text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
+                    v{selectedPlugin.version}
+                  </span>
+                  {selectedPlugin.category && (
+                    <span className="text-xs text-stone-600 bg-stone-100/70 px-2 py-0.5 rounded-full border border-stone-200">
+                      {selectedPlugin.category}
+                    </span>
+                  )}
+                  {selectedPlugin.author && (
+                    <span className="text-xs text-stone-400">
+                      von <span className="text-stone-700 font-medium">{selectedPlugin.author}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Vollständige Beschreibung */}
+            <div className="mb-6">
+              <h3 className="text-xs uppercase tracking-widest text-stone-400 font-semibold mb-2 font-mono">
+                Funktionsumfang & Beschreibung
+              </h3>
+              <p className="text-stone-600 text-sm leading-relaxed whitespace-pre-line bg-stone-50/70 p-5 rounded-2xl border border-stone-200/60">
+                {selectedPlugin.description || 'Keine Beschreibung verfügbar.'}
+              </p>
+            </div>
+
+            {/* Bereitgestellte Routen mit Links */}
+            {selectedPlugin.routes && selectedPlugin.routes.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-xs uppercase tracking-widest text-stone-400 font-semibold mb-2.5 font-mono">
+                  Bereitgestellte Routen & Oberflächen
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {selectedPlugin.routes.map((route, idx) => (
+                    <Link
+                      key={idx}
+                      to={route.path.startsWith('/yeti') ? route.path.replace(/^\/yeti/, '') || '/' : route.path}
+                      onClick={() => setSelectedPlugin(null)}
+                      className="
+                        flex items-center justify-between p-3.5 rounded-2xl
+                        bg-stone-50 hover:bg-stone-100 border border-stone-200/70
+                        transition-all group
+                      "
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span>📍</span>
+                        <span className="text-sm font-semibold text-stone-800 group-hover:text-stone-950">
+                          {route.name}
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs text-stone-500 bg-white px-2 py-0.5 rounded-md border border-stone-200">
+                        {route.path} ↗
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Abhängigkeiten */}
+            {selectedPlugin.dependencies && selectedPlugin.dependencies.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-xs uppercase tracking-widest text-stone-400 font-semibold mb-2 font-mono">
+                  System-Abhängigkeiten
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPlugin.dependencies.map((dep, idx) => (
+                    <span
+                      key={idx}
+                      className="text-xs bg-stone-100 text-stone-700 px-3 py-1.5 rounded-xl border border-stone-200 flex items-center gap-1.5"
+                    >
+                      <span>🔗</span>
+                      <span className="font-medium">{dep.name || dep.id}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Aktionen im Drawer Footer */}
+            <div className="mt-auto pt-6 border-t border-stone-200 flex items-center justify-between gap-4">
+              {selectedPlugin.installed ? (
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Dieses Modul ist aktiv
+                  </span>
+                  <button
+                    onClick={() => {
+                      setUninstallTarget(selectedPlugin);
+                      setKeepData(true);
+                      setSelectedPlugin(null);
+                    }}
+                    className="px-4 py-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold transition-all"
+                  >
+                    Deinstallieren
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleInstall(selectedPlugin.name);
+                    setSelectedPlugin(null);
+                  }}
+                  className="
+                    w-full py-3 rounded-2xl
+                    bg-stone-900 hover:bg-stone-800 text-stone-50
+                    font-semibold text-sm shadow-lg shadow-stone-900/15
+                    transition-all active:scale-[0.98]
+                  "
+                >
+                  Modul jetzt installieren
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

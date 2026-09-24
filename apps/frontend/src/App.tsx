@@ -1,9 +1,11 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { TopologyMap } from './pages/TopologyMap';
 import { PluginManager } from './pages/PluginManager';
+import { PatientOnboarding } from './pages/PatientOnboarding';
+import { ReceptionDashboard } from './pages/ReceptionDashboard';
 import { EventProvider } from './context/EventContext';
 
 export const App: React.FC = () => {
@@ -18,6 +20,10 @@ export const App: React.FC = () => {
               <Route path="/" element={<Dashboard />} />
               <Route path="/topology" element={<TopologyMap />} />
               <Route path="/plugins" element={<PluginManager />} />
+              <Route path="/patient" element={<PatientOnboarding />} />
+              <Route path="/reception" element={<ReceptionDashboard />} />
+              {/* Fallback für unbekannte Routen verhindert weiße Seiten */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
         </div>

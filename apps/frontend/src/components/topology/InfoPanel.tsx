@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import 'katex/dist/katex.min.css';
 import { InlineMath, BlockMath } from 'react-katex';
 import { CustomNodeData } from './CustomNode';
@@ -97,9 +98,9 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ nodeData, onClose }) => {
               </h3>
               <div className="flex flex-col gap-2">
                 {nodeData.routes.map((route, idx) => (
-                  <a
+                  <Link
                     key={idx}
-                    href={route.path}
+                    to={route.path.startsWith('/yeti') ? route.path.replace(/^\/yeti/, '') || '/' : route.path}
                     className="
                       flex items-center justify-between p-3.5 rounded-2xl
                       bg-stone-50/90 hover:bg-stone-100/90 border border-stone-200/70
@@ -115,9 +116,29 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ nodeData, onClose }) => {
                     <span className="font-mono text-xs text-stone-500 group-hover:text-stone-700 bg-white/80 px-2 py-0.5 rounded-md border border-stone-200/50">
                       {route.path} ↗
                     </span>
-                  </a>
+                  </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Store-Installationsbutton für store-available */}
+          {nodeData.status === 'store-available' && (
+            <div className="mb-8 p-5 bg-stone-100/70 rounded-2xl border border-stone-200 flex flex-col gap-3">
+              <div className="text-xs text-stone-600">
+                Dieses Modul ist im Plugin-Store registriert und kann mit einem Klick installiert werden.
+              </div>
+              <Link
+                to="/plugins"
+                className="
+                  inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                  bg-stone-900 hover:bg-stone-800 text-stone-50 text-xs font-semibold
+                  shadow-md shadow-stone-900/10 transition-all
+                "
+              >
+                <span>🛒</span>
+                <span>Im Plugin-Store öffnen & installieren</span>
+              </Link>
             </div>
           )}
 
