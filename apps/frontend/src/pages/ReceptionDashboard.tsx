@@ -112,18 +112,20 @@ export const ReceptionDashboard: React.FC = () => {
   const countNormal = patients.filter(p => p.triageLevel === 'green' || p.triageLevel === 'blue').length;
 
   return (
-    <div className="max-w-6xl mx-auto mt-4 pb-16">
+    <div className="max-w-6xl mx-auto mt-2 sm:mt-4 pb-12 sm:pb-16 px-1 sm:px-2">
       {/* Header */}
-      <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <header className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-2xl">📋</span>
-            <span className="text-xs font-mono uppercase tracking-widest text-stone-400 font-semibold">
+            <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-stone-400 font-semibold">
               Live Monitor
             </span>
           </div>
-          <h2 className="text-4xl font-serif text-stone-900 tracking-tight">Empfangs-Dashboard</h2>
-          <p className="text-stone-500 text-base mt-1">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif text-stone-900 tracking-tight">
+            Empfangs-Dashboard
+          </h2>
+          <p className="text-stone-500 text-xs sm:text-sm md:text-base mt-1">
             Echtzeit-Warteschlange und strukturierter Triage-Status der zentralen Patientenaufnahme.
           </p>
         </div>
@@ -131,10 +133,10 @@ export const ReceptionDashboard: React.FC = () => {
         <Link
           to="/patient"
           className="
-            inline-flex items-center gap-2 px-5 py-3 rounded-2xl
+            inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl
             bg-stone-900 hover:bg-stone-800 text-stone-50
-            shadow-lg shadow-stone-900/15 text-sm font-semibold
-            transition-all duration-200 active:scale-[0.98] self-start md:self-auto
+            shadow-lg shadow-stone-900/15 text-xs sm:text-sm font-semibold
+            transition-all duration-200 active:scale-[0.98] w-full sm:w-auto
           "
         >
           <span>＋</span>

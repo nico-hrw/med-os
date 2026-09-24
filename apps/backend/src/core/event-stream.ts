@@ -10,6 +10,23 @@ export function registerApiRoute(methodAndPath: string, handler: Function) {
   apiRoutes.set(methodAndPath, handler);
 }
 
+export function unregisterApiRoute(methodAndPath: string) {
+  apiRoutes.delete(methodAndPath);
+}
+
+// Heartbeat-Intervall alle 15 Sekunden: Erkennt verwaiste Sockets (z.B. nach Reloads oder Netzwerkabbrüchen)
+// und bereinigt sie sofort, sodass der HTTP-Connection-Pool niemals erschöpft.
+setInterval(() => {
+  for (const client of Array.from(clients)) {
+    try {
+      client.write(': ping\n\n');
+    } catch {
+      clients.delete(client);
+      try { client.end(); } catch {}
+    }
+  }
+}, 15000);
+
 /**
  * Startet einen rudimentären HTTP-Server exklusiv für Server-Sent Events und dynamische API-Routen.
  */
@@ -21,7 +38,10 @@ export function startEventServer(port: number = 4000) {
     res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(200);
+      res.writeHead(200, {
+        'Content-Length': '0',
+        'Connection': 'keep-alive',
+      });
       res.end();
       return;
     }
@@ -44,22 +64,31 @@ export function startEventServer(port: number = 4000) {
       // Client im Speicher registrieren
       clients.add(res);
 
-      req.on('close', () => {
+      const cleanup = () => {
         clients.delete(res);
         try {
           res.end();
         } catch {
           // Verbindung bereits geschlossen
         }
-      });
+      };
+
+      req.on('close', cleanup);
+      req.on('error', cleanup);
+      res.on('error', cleanup);
     } else if (apiRoutes.has(methodAndPath)) {
       const handler = apiRoutes.get(methodAndPath);
       if (handler) {
         handler(req, res);
       }
     } else {
-      res.writeHead(404);
-      res.end();
+      const notFoundBody = JSON.stringify({ error: 'Not Found', path: urlPath });
+      res.writeHead(404, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(notFoundBody),
+        'Connection': 'keep-alive',
+      });
+      res.end(notFoundBody);
     }
   });
 
@@ -73,7 +102,7 @@ export function startEventServer(port: number = 4000) {
  */
 export function broadcastEvent(type: string, data: any) {
   const payload = `data: ${JSON.stringify({ type, ...data })}\n\n`;
-  for (const client of clients) {
+  for (const client of Array.from(clients)) {
     try {
       client.write(payload);
     } catch {

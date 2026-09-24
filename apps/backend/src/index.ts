@@ -19,6 +19,20 @@ function parseJsonBody(req: http.IncomingMessage): Promise<any> {
   });
 }
 
+/**
+ * Sendet eine standardisierte JSON-Antwort mit explizitem Content-Length Header.
+ * Verhindert das Schließen von Keep-Alive Sockets im HTTP/1.1 Stack.
+ */
+function sendJsonResponse(res: any, statusCode: number, data: any) {
+  const body = JSON.stringify(data);
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(body),
+    'Connection': 'keep-alive',
+  });
+  res.end(body);
+}
+
 async function bootstrap() {
   console.log('🏔️  MedOS Yeti Kernel initialisiert...');
   
@@ -44,11 +58,9 @@ async function bootstrap() {
   registerApiRoute('GET /api/system/plugins/available', async (_req: any, res: any) => {
     try {
       const available = await loader.getAvailablePlugins();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, data: available }));
+      sendJsonResponse(res, 200, { success: true, data: available });
     } catch (err: any) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJsonResponse(res, 500, { error: err.message });
     }
   });
 
@@ -65,11 +77,9 @@ async function bootstrap() {
         dependencies: p.manifest.dependencies || [],
         routes: p.manifest.routes || [],
       }));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, data: active }));
+      sendJsonResponse(res, 200, { success: true, data: active });
     } catch (err: any) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJsonResponse(res, 500, { error: err.message });
     }
   });
 
@@ -79,14 +89,12 @@ async function bootstrap() {
       const pluginId = body.pluginId;
 
       if (!pluginId || typeof pluginId !== 'string') {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'pluginId ist erforderlich.' }));
+        sendJsonResponse(res, 400, { error: 'pluginId ist erforderlich.' });
         return;
       }
 
       // Sofortige Antwort — die eigentliche Installation läuft asynchron mit SSE-Feedback
-      res.writeHead(202, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: `Installation von '${pluginId}' gestartet.` }));
+      sendJsonResponse(res, 202, { success: true, message: `Installation von '${pluginId}' gestartet.` });
 
       // Installation im Hintergrund starten (Fehler werden via SSE gemeldet)
       loader.installPlugin(pluginId).catch(err => {
@@ -94,8 +102,7 @@ async function bootstrap() {
       });
 
     } catch (err: any) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJsonResponse(res, 500, { error: err.message });
     }
   });
 
@@ -116,22 +123,19 @@ async function bootstrap() {
         : (queryKeepData !== null ? queryKeepData !== 'false' : true);
 
       if (!pluginId || typeof pluginId !== 'string') {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'pluginId ist erforderlich.' }));
+        sendJsonResponse(res, 400, { error: 'pluginId ist erforderlich.' });
         return;
       }
 
       await loader.uninstallPlugin(pluginId, keepData);
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
+      sendJsonResponse(res, 200, { 
         success: true, 
         message: `Plugin '${pluginId}' erfolgreich deinstalliert (keepData=${keepData}).` 
-      }));
+      });
     } catch (err: any) {
       console.error(`[Kernel] Fehler beim Deinstallieren von Plugin:`, err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJsonResponse(res, 500, { error: err.message });
     }
   });
 

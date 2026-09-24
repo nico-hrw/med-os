@@ -3,7 +3,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import chokidar from 'chokidar';
 import { IPlugin, ManifestSchema, PluginContext } from '../interfaces/core-interfaces';
-import { broadcastEvent, registerApiRoute } from './event-stream';
+import { broadcastEvent, registerApiRoute, unregisterApiRoute } from './event-stream';
 import { PluginDBProxy } from './plugin-db-proxy';
 
 /**
@@ -13,6 +13,7 @@ import { PluginDBProxy } from './plugin-db-proxy';
  */
 class KernelContext implements PluginContext {
   private services = new Map<string, unknown>();
+  private pluginRoutes = new Map<string, Set<string>>();
 
   registerService(name: string, service: unknown): void {
     if (this.services.has(name)) {
@@ -30,6 +31,17 @@ class KernelContext implements PluginContext {
     registerApiRoute(routePath, handler as Function);
   }
 
+  unregisterPluginRoutes(pluginName: string): void {
+    const routes = this.pluginRoutes.get(pluginName);
+    if (routes) {
+      for (const routePath of routes) {
+        console.log(`[Kernel] Route deregistriert für '${pluginName}': ${routePath}`);
+        unregisterApiRoute(routePath);
+      }
+      this.pluginRoutes.delete(pluginName);
+    }
+  }
+
   /**
    * Erzeugt eine eingefrorene Kopie dieses Contexts für ein spezifisches Plugin.
    * Der DB-Service wird durch einen scoped PluginDBProxy ersetzt.
@@ -37,6 +49,10 @@ class KernelContext implements PluginContext {
   createSandboxedContext(pluginName: string): PluginContext {
     const prisma = this.services.get('db') as any;
     const proxy = prisma ? new PluginDBProxy(prisma, pluginName) : undefined;
+
+    if (!this.pluginRoutes.has(pluginName)) {
+      this.pluginRoutes.set(pluginName, new Set());
+    }
 
     const sandboxed: PluginContext = {
       registerService: (name: string, service: unknown) => {
@@ -47,6 +63,7 @@ class KernelContext implements PluginContext {
         return this.getService<T>(name);
       },
       registerRoute: (routePath: string, handler: unknown) => {
+        this.pluginRoutes.get(pluginName)?.add(routePath);
         this.registerRoute(routePath, handler);
       },
     };
@@ -419,6 +436,9 @@ export class PluginLoader {
       // Fehler beim Shutdown fangen, damit das System sauber weiterläuft
       console.error(`[Kernel Guard] Fehler beim Entladen von ${name}:`, err.message);
     } finally {
+      // Routen des Plugins aus dem Kernel entfernen
+      this.context.unregisterPluginRoutes(name);
+
       // Das Modul wird rigoros aus der Registry entfernt
       this.plugins.delete(name);
       console.log(`[PluginLoader] Erfolgreich entladen: ${name}`);

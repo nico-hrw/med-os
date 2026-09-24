@@ -5,6 +5,9 @@ type EventCallback = (data: any) => void;
 interface EventContextValue {
   connected: boolean;
   activeModules: number;
+  activePlugins: string[];
+  isPluginActive: (name: string) => boolean;
+  refreshActivePlugins: () => Promise<void>;
   subscribe: (callback: EventCallback) => () => void;
 }
 
@@ -15,6 +18,7 @@ const API_BASE = '/yeti/api';
 export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [activeModules, setActiveModules] = useState(0);
+  const [activePlugins, setActivePlugins] = useState<string[]>([]);
   const subscribersRef = useRef<Set<EventCallback>>(new Set());
 
   // Registrierung für Event-Listener
@@ -25,19 +29,28 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
-  // Initialen Zähler für aktive Module laden
-  useEffect(() => {
-    fetch(`${API_BASE}/system/plugins/active`)
-      .then(res => res.json())
-      .then(json => {
-        if (json.success && Array.isArray(json.data)) {
-          setActiveModules(json.data.length);
-        }
-      })
-      .catch((err) => {
-        console.warn('Initialer Modul-Status konnte nicht geladen werden:', err);
-      });
+  const refreshActivePlugins = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/system/plugins/active`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const names = json.data.map((p: any) => p.name);
+        setActivePlugins(names);
+        setActiveModules(names.length);
+      }
+    } catch (err) {
+      console.warn('Aktive Plugins konnten nicht geladen werden:', err);
+    }
   }, []);
+
+  // Initialer Modul-Status
+  useEffect(() => {
+    refreshActivePlugins();
+  }, [refreshActivePlugins]);
+
+  const isPluginActive = useCallback((name: string) => {
+    return activePlugins.includes(name);
+  }, [activePlugins]);
 
   // Einzige persistente SSE-Verbindung für die gesamte App-Lebensdauer
   useEffect(() => {
@@ -58,8 +71,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           if (data.type === 'CONNECTED') {
             setConnected(true);
-          } else if (data.type === 'PLUGIN_UPDATE' && typeof data.activeCount === 'number') {
-            setActiveModules(data.activeCount);
+          } else if (data.type === 'PLUGIN_UPDATE') {
+            if (typeof data.activeCount === 'number') {
+              setActiveModules(data.activeCount);
+            }
+            refreshActivePlugins();
           }
 
           // An alle registrierten Komponenten weiterleiten
@@ -71,7 +87,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           });
         } catch (err) {
-          console.error('SSE JSON-Parse-Fehler:', err);
+          // Heartbeat ping oder non-JSON ignoriert
         }
       };
 
@@ -82,16 +98,24 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     connect();
 
-    return () => {
-      isDisposed = true;
+    const handleBeforeUnload = () => {
       if (eventSource) {
         eventSource.close();
       }
     };
-  }, []);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      isDisposed = true;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [refreshActivePlugins]);
 
   return (
-    <EventContext.Provider value={{ connected, activeModules, subscribe }}>
+    <EventContext.Provider value={{ connected, activeModules, activePlugins, isPluginActive, refreshActivePlugins, subscribe }}>
       {children}
     </EventContext.Provider>
   );

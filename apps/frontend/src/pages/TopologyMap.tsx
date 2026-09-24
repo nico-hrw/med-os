@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -7,7 +7,8 @@ import ReactFlow, {
   ConnectionLineType,
   useNodesState,
   useEdgesState,
-  NodeMouseHandler
+  NodeMouseHandler,
+  ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -51,8 +52,20 @@ export const TopologyMap: React.FC = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNodeData, setSelectedNodeData] = useState<CustomNodeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
+
+  // Wenn ein Knoten ausgewählt wird oder geschlossen wird, verschiebt sich die Leinwand.
+  // fitView passt die Ansicht weich an den verbleibenden sichtbaren Bereich an.
+  useEffect(() => {
+    if (reactFlowInstanceRef.current) {
+      const timer = setTimeout(() => {
+        reactFlowInstanceRef.current?.fitView({ duration: 500, padding: 0.25 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedNodeData]);
 
   // Erzeugt das dynamische Topologie-Graph-Modell
   const buildGraph = useCallback((active: ActivePlugin[], available: AvailablePlugin[]) => {
@@ -261,22 +274,33 @@ export const TopologyMap: React.FC = () => {
         </div>
       )}
 
-      <div className="w-full h-full min-h-[500px] relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={onNodeClick}
-          onPaneClick={onPaneClick}
-          nodeTypes={nodeTypes}
-          connectionLineType={ConnectionLineType.SmoothStep}
-          fitView
-          className="bg-transparent"
+      <div className="w-full h-full min-h-[500px] relative overflow-hidden">
+        {/* Canvas-Bereich: Verschiebt sich sanft nach links, sobald die Modul-Seitenleiste rechts öffnet */}
+        <div 
+          className={`
+            w-full h-full transition-[margin-right] duration-500 ease-out
+            ${selectedNodeData ? 'mr-0 lg:mr-[30rem]' : 'mr-0'}
+          `}
         >
-          <Background color="#e7e5e4" gap={24} size={1} />
-          <Controls className="!bg-white !border-stone-200 !shadow-sm fill-stone-600 !rounded-xl overflow-hidden" showInteractive={false} />
-        </ReactFlow>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            onInit={(instance) => {
+              reactFlowInstanceRef.current = instance;
+            }}
+            fitView
+            className="bg-transparent"
+          >
+            <Background color="#e7e5e4" gap={24} size={1} />
+            <Controls className="!bg-white !border-stone-200 !shadow-sm fill-stone-600 !rounded-xl overflow-hidden" showInteractive={false} />
+          </ReactFlow>
+        </div>
         
         <InfoPanel 
           nodeData={selectedNodeData} 

@@ -5,15 +5,31 @@ Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumen
 ## [Unreleased] - 2026-09-24
 
 ### Behoben
+- **Dynamisches Plugin-Lifecycle & Route-Guarding bei deinstallierten Modulen**:
+  - `plugin-loader.ts` & `event-stream.ts`: `KernelContext` deregistriert beim Unload oder Deinstallieren eines Plugins nun automatisch alle registrierten API-Routen (`unregisterPluginRoutes(name)`). Aufrufe an Endpunkte deinstallierter Module (z.B. `/api/onboarding/submit`, `/api/onboarding/list`) laufen künftig ins reguläre 404 mit standardisiertem JSON-Body und `Content-Length`.
+  - `PluginRouteGuard.tsx`: Neuer Routen-Wächter für dynamische Plugin-Oberflächen (`/patient`, `/reception`). Verhindert das Aufrufen ungemounteter Inhalte nach einer Modul-Deinstallation und präsentiert dem Nutzer stattdessen eine elegante Status-Meldung ("Modul nicht aktiv") mit 1-Klick-Link zur Reinstallation im Plugin-Store.
+  - `Sidebar.tsx`: Zeigt Links zu klinischen Modulen unter "Klinische Module" nur noch dann dynamisch an, wenn das zugehörige Plugin geladen und aktiv ist.
+- **Dauerhafte Beseitigung des Verbindungs-Freeze (Socket-Exhaustion & SSE-Orphans)**:
+  - `event-stream.ts`: 15-Sekunden Ping-Heartbeat (`: ping\n\n`) für alle aktiven SSE-Clients implementiert. Erkennt verwaiste TCP-Sockets nach Browser-Reloads oder Tab-Schließungen sofort und bereinigt sie zuverlässig aus dem Client-Pool.
+  - Standardisierte HTTP-Response-Header mit expliziter `Content-Length` und `Connection: keep-alive` auf allen API-Routen, 404- und OPTIONS-Preflight-Antworten ergänzt, um vorzeitige Schließungen von Keep-Alive-Sockets im Reverse-Proxy zu verhindern.
+  - Nginx auf `go-tide.app` auf `listen 443 ssl http2;` umgestellt und SSE-Streaming isoliert auf `/yeti/api/events` geführt.
 - **Weiße Seiten bei Patienten-Onboarding und Empfangs-Dashboard behoben**:
   - `PatientOnboarding.tsx`: Neues Frontend-Formular für strukturierte Patienten-Erstaufnahme und Manchester-Triage-System (MTS) mit 5 Dringlichkeitsstufen, biometrischer Datenerfassung und Sofort-Übermittlung an den Kernel (`/yeti/api/onboarding/submit`).
   - `ReceptionDashboard.tsx`: Neues Live-Dashboard für das Empfangspersonal mit KPI-Kacheln, Triage-Filter, Patientensuche, Detail-Modal und nativer Echtzeit-Aktualisierung über SSE (`NEW_PATIENT`).
   - Routen `/patient` und `/reception` in `App.tsx` registriert sowie ein `<Route path="*" element={<Navigate to="/" replace />} />` Fallback eingerichtet, um ungemountete weiße Seiten künftig prinzipiell auszuschließen.
   - In-Memory Fallback im `patient-onboarding` Plugin implementiert, damit Aufnahme- und Abfrage-Routen auch auf Systemen ohne aktiven Prisma-DB-Client stets einsatzbereit sind.
-- **Zentraler EventProvider & Beseitigung des HTTP/1.1 Socket-Exhaustion-Bugs (Freeze nach ~7 Klicks)**:
+- **Zentraler EventProvider & Beseitigung des HTTP/1.1 Socket-Exhaustion-Bugs**:
   - `EventContext.tsx` & `EventProvider`: Zentraler SSE-Provider auf App-Ebene (`App.tsx`) eingeführt. Hält genau eine einzige persistente SSE-Verbindung für die gesamte Anwendungslebensdauer offen. Unterseiten (`Dashboard`, `PluginManager`, `TopologyMap`, `ReceptionDashboard`) abonnieren Kernel-Events über den `useKernelEvents`-Hook, anstatt bei jeder Navigation eine eigene `EventSource` auf- und abzubauen.
-  - Verhindert das Erreichen des browserseitigen HTTP/1.1-Connection-Limits (max. 6 TCP-Sockets pro Host), wodurch `fetch()`-Requests im Plugin-Manager und in der System-Topologie nie wieder blockiert/gestallt werden.
-  - Backend `event-stream.ts`: Explizites `res.end()` bei Verbindungsabbruch (`req.on('close')`) und Hinzufügen von `X-Accel-Buffering: no` für Nginx-Reverse-Proxies implementiert, um serverseitige hängende Sockets zu eliminieren.
+
+### Hinzugefügt
+- **Mobile-First App-Shell & Responsives Seiten-Gerüst**:
+  - `App.tsx`: Mobiler Sticky-Header (`md:hidden`) mit Logo, System-Status und Hamburger-Button (`☰` / `✕`) sowie ein leichtgängig einfliegender Drawer mit Weichzeichner-Backdrop für kleine Bildschirme integriert.
+  - `PatientOnboarding.tsx`: Responsives Gerüst mit touch-optimierten Triage-Karten (`grid-cols-2 sm:grid-cols-3 md:grid-cols-5`), adaptiven Abständen (`p-5 sm:p-8`) und nativer 16px-Schriftart zur Vermeidung des automatischen iOS-Safari-Zooms.
+  - `ReceptionDashboard.tsx`: Vollständig responsive Überwachung mit stapelbaren Filtern und Aktions-Buttons.
+- **Plugin Store: Vertikale Listenansicht statt Collage**:
+  - `PluginManager.tsx`: Wechsel vom 3-Spalten-Würfel-Raster zu einer geordneten, vertikal gestapelten Liste einheitlicher Modul-Einträge. Bietet Direktübersicht über Icon, Version, Kategorie, 2-zeilige Beschreibung, Routen-Badges und Schnell-Aktionen; Klick öffnet das Detail-Drawer.
+- **System-Topologie: Dynamische Verschiebung der Graph-Struktur nach links**:
+  - `TopologyMap.tsx`: Klick auf einen Knoten löst eine weiche CSS-Margintransformation (`mr-0 lg:mr-[30rem]`) des ReactFlow-Canvas aus und zentriert den Graphen via animiertem `fitView({ duration: 500 })` automatisch im sichtbaren linken Bereich, sodass die Struktur nicht mehr vom InfoPanel verdeckt wird.
 - **Kritischer Fehler: React App wurde nicht in den DOM gemountet**:
   - `src/main.tsx` als React-Entrypoint mit `ReactDOM.createRoot(document.getElementById('root')!).render(<App />)` erstellt.
   - `index.html` auf `/src/main.tsx` umgestellt (zuvor wurde lediglich `App.tsx` geladen, welches keine DOM-Montage durchführte und somit eine weiße Seite hinterließ).

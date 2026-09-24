@@ -77,12 +77,22 @@ export default class PatientOnboardingPlugin implements IPlugin {
 
         broadcastEvent('NEW_PATIENT', { data: newEntry });
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, data: newEntry }));
+        const successBody = JSON.stringify({ success: true, data: newEntry });
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(successBody),
+          'Connection': 'keep-alive',
+        });
+        res.end(successBody);
       } catch (err: any) {
         console.error('[Patienten-Onboarding] Fehler beim Speichern:', err);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        const errBody = JSON.stringify({ error: err.message });
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(errBody),
+          'Connection': 'keep-alive',
+        });
+        res.end(errBody);
       }
     });
 
@@ -96,12 +106,22 @@ export default class PatientOnboardingPlugin implements IPlugin {
           patients = this.memoryPatients;
         }
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, data: patients }));
+        const successBody = JSON.stringify({ success: true, data: patients });
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(successBody),
+          'Connection': 'keep-alive',
+        });
+        res.end(successBody);
       } catch (err: any) {
         console.error('[Patienten-Onboarding] Fehler beim Abrufen:', err);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        const errBody = JSON.stringify({ error: err.message });
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(errBody),
+          'Connection': 'keep-alive',
+        });
+        res.end(errBody);
       }
     });
   }

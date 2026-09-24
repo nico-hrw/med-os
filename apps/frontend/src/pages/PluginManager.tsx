@@ -170,7 +170,7 @@ export const PluginManager: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="flex flex-col gap-3.5">
           {plugins.map((plugin) => {
             const progress = installing[plugin.name];
             const error = errors[plugin.name];
@@ -183,13 +183,13 @@ export const PluginManager: React.FC = () => {
                 onClick={() => setSelectedPlugin(plugin)}
                 className="
                   relative overflow-hidden
-                  bg-gradient-to-br from-white/80 to-white/50
+                  bg-gradient-to-r from-white/90 via-white/80 to-white/60
+                  hover:from-white hover:to-white/90
                   backdrop-blur-xl
-                  border border-stone-200/60 hover:border-stone-300
-                  rounded-3xl
-                  h-[260px] p-6
-                  flex flex-col justify-between
-                  shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.07)]
+                  border border-stone-200/70 hover:border-stone-300
+                  rounded-2xl sm:rounded-3xl
+                  p-4 sm:p-5
+                  shadow-xs hover:shadow-md
                   transition-all duration-200 cursor-pointer group select-none
                 "
               >
@@ -203,74 +203,91 @@ export const PluginManager: React.FC = () => {
                   </div>
                 )}
 
-                {/* Card Top / Header */}
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-stone-100/90 border border-stone-200/60 flex items-center justify-center text-2xl flex-shrink-0 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Left: Icon & Details */}
+                  <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl bg-stone-100/90 border border-stone-200/60 flex items-center justify-center text-2xl flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
                       {plugin.icon || '🧩'}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                      <span className="text-[10px] font-mono text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">
-                        v{plugin.version}
-                      </span>
-                      {plugin.category && (
-                        <span className="text-[10px] text-stone-600 bg-stone-100/70 px-2 py-0.5 rounded-full border border-stone-200/40">
-                          {plugin.category}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="text-base font-semibold text-stone-900 group-hover:text-stone-950 tracking-tight">
+                          {plugin.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full border border-stone-200/40">
+                          v{plugin.version}
                         </span>
-                      )}
+                        {plugin.category && (
+                          <span className="text-[10px] text-stone-600 bg-stone-100/80 px-2 py-0.5 rounded-full border border-stone-200/40">
+                            {plugin.category}
+                          </span>
+                        )}
+                        {plugin.author && (
+                          <span className="text-[11px] text-stone-400 hidden md:inline">
+                            von {plugin.author}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Kurze 1-2 zeilige Beschreibung */}
+                      <p className="text-stone-500 text-xs sm:text-sm leading-relaxed line-clamp-1 sm:line-clamp-2">
+                        {plugin.description || 'Keine Beschreibung verfügbar.'}
+                      </p>
+
+                      {/* Badges Zeile */}
+                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-stone-400">
+                        {plugin.routes && plugin.routes.length > 0 && (
+                          <span className="text-stone-600 bg-stone-50 px-2 py-0.5 rounded border border-stone-200/40">
+                            📍 {plugin.routes.length} Route{plugin.routes.length > 1 ? 'n' : ''}
+                          </span>
+                        )}
+                        {plugin.dependencies && plugin.dependencies.length > 0 && (
+                          <span className="hidden sm:inline text-stone-500">
+                            🔗 {plugin.dependencies.length} Abhängigkeit{plugin.dependencies.length > 1 ? 'en' : ''}
+                          </span>
+                        )}
+                        {error && (
+                          <span className="text-red-600 font-medium">
+                            ⚠️ {error}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <h3 className="text-base font-semibold text-stone-900 group-hover:text-stone-950 tracking-tight truncate">
-                    {plugin.name}
-                  </h3>
+                  {/* Right: Actions & Status */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
+                    <div onClick={(e) => e.stopPropagation()}>
+                      {isInstalled ? (
+                        <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200/60 flex items-center gap-1.5 shadow-2xs">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                          Aktiv
+                        </span>
+                      ) : isInstalling ? (
+                        <span className="text-xs font-semibold text-stone-500 bg-stone-100 px-3 py-1.5 rounded-xl border border-stone-200/50">
+                          {progress.percent}%
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleInstall(plugin.name)}
+                          className="
+                            px-4 py-2 rounded-xl
+                            bg-stone-900 text-stone-50 text-xs font-semibold
+                            shadow-md shadow-stone-900/10 hover:bg-stone-800
+                            active:scale-95 transition-all
+                          "
+                        >
+                          Installieren
+                        </button>
+                      )}
+                    </div>
 
-                  {/* Kurze 2-zeilige Beschreibung */}
-                  <p className="text-stone-500 text-xs leading-relaxed mt-2 line-clamp-2">
-                    {plugin.description || 'Keine Beschreibung verfügbar.'}
-                  </p>
-
-                  {/* Fehleranzeige inline */}
-                  {error && (
-                    <p className="text-[11px] text-red-600 mt-1.5 truncate">
-                      ⚠️ {error}
-                    </p>
-                  )}
-                </div>
-
-                {/* Card Footer */}
-                <div className="pt-3 border-t border-stone-200/50 flex items-center justify-between mt-auto">
-                  <div className="text-[11px] text-stone-400 font-medium flex items-center gap-1">
-                    {plugin.routes && plugin.routes.length > 0 ? (
-                      <span className="text-stone-500">📍 {plugin.routes.length} Route{plugin.routes.length > 1 ? 'n' : ''}</span>
-                    ) : (
-                      <span>Details ↗</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    {isInstalled ? (
-                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200/60 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Aktiv
-                      </span>
-                    ) : isInstalling ? (
-                      <span className="text-xs font-semibold text-stone-400 bg-stone-100 px-2.5 py-1 rounded-xl">
-                        {progress.percent}%
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleInstall(plugin.name)}
-                        className="
-                          px-3.5 py-1.5 rounded-xl
-                          bg-stone-900 text-stone-50 text-xs font-semibold
-                          shadow-md shadow-stone-900/10 hover:bg-stone-800
-                          active:scale-95 transition-all
-                        "
-                      >
-                        Installieren
-                      </button>
-                    )}
+                    <span className="text-xs text-stone-400 group-hover:text-stone-700 transition-colors flex items-center gap-1">
+                      <span>Details</span>
+                      <span>↗</span>
+                    </span>
                   </div>
                 </div>
               </div>
