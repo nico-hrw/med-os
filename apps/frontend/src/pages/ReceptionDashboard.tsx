@@ -55,20 +55,23 @@ export const ReceptionDashboard: React.FC = () => {
           } catch {
             data = {};
           }
+          const pData = data.patientData || data;
+          const ans = data.answers || data;
+
           return {
             id: rec.id || rec.key,
             key: rec.key,
-            firstName: data.firstName || 'Unbekannt',
-            lastName: data.lastName || '',
-            birthDate: data.birthDate,
-            gender: data.gender,
-            insurance: data.insurance,
-            insuranceNumber: data.insuranceNumber,
-            phone: data.phone,
-            emergencyContact: data.emergencyContact,
-            triageLevel: data.triageLevel || 'yellow',
-            chiefComplaint: data.chiefComplaint,
-            allergies: data.allergies,
+            firstName: pData.firstName || 'Unbekannt',
+            lastName: pData.lastName || '',
+            birthDate: pData.birthDate,
+            gender: pData.gender,
+            insurance: pData.insurance,
+            insuranceNumber: pData.insuranceNumber,
+            phone: pData.phone,
+            emergencyContact: pData.emergencyContact,
+            triageLevel: pData.triageLevel || (ans.painScale >= 8 ? 'orange' : ans.painScale >= 5 ? 'yellow' : 'green'),
+            chiefComplaint: ans.chiefComplaint,
+            allergies: ans.allergies,
             admittedAt: data.admittedAt || rec.createdAt || new Date().toISOString(),
           };
         });

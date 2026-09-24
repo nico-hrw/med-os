@@ -5,7 +5,7 @@ import { PluginRouteGuard } from './components/PluginRouteGuard';
 import { Dashboard } from './pages/Dashboard';
 import { TopologyMap } from './pages/TopologyMap';
 import { PluginManager } from './pages/PluginManager';
-import { PatientOnboarding } from './pages/PatientOnboarding';
+import { PatientForm } from './pages/PatientForm';
 import { ReceptionDashboard } from './pages/ReceptionDashboard';
 import { EventProvider } from './context/EventContext';
 
@@ -73,7 +73,7 @@ export const AppContent: React.FC = () => {
             path="/patient"
             element={
               <PluginRouteGuard pluginId="patient-onboarding" pluginTitle="Patientenaufnahme">
-                <PatientOnboarding />
+                <PatientForm />
               </PluginRouteGuard>
             }
           />

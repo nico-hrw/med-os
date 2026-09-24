@@ -27,6 +27,55 @@ setInterval(() => {
   }
 }, 15000);
 
+interface RouteMatch {
+  handler: Function;
+  params: Record<string, string>;
+}
+
+function matchRoute(method: string, urlPath: string): RouteMatch | null {
+  const directKey = `${method} ${urlPath}`;
+  if (apiRoutes.has(directKey)) {
+    return { handler: apiRoutes.get(directKey)!, params: {} };
+  }
+
+  // Parameterisierte Routen testen (z.B. GET /api/onboarding/patient/:insuranceNumber)
+  const incomingParts = urlPath.split('/').filter(Boolean);
+
+  for (const [routePattern, handler] of apiRoutes.entries()) {
+    const spaceIndex = routePattern.indexOf(' ');
+    if (spaceIndex === -1) continue;
+    const routeMethod = routePattern.substring(0, spaceIndex);
+    const routePath = routePattern.substring(spaceIndex + 1);
+
+    if (routeMethod !== method) continue;
+
+    const patternParts = routePath.split('/').filter(Boolean);
+    if (patternParts.length !== incomingParts.length) continue;
+
+    const params: Record<string, string> = {};
+    let matches = true;
+
+    for (let i = 0; i < patternParts.length; i++) {
+      const pPart = patternParts[i];
+      const inPart = incomingParts[i];
+
+      if (pPart.startsWith(':')) {
+        const paramName = pPart.slice(1);
+        params[paramName] = decodeURIComponent(inPart);
+      } else if (pPart !== inPart) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      return { handler, params };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Startet einen rudimentären HTTP-Server exklusiv für Server-Sent Events und dynamische API-Routen.
  */
@@ -76,19 +125,20 @@ export function startEventServer(port: number = 4000) {
       req.on('close', cleanup);
       req.on('error', cleanup);
       res.on('error', cleanup);
-    } else if (apiRoutes.has(methodAndPath)) {
-      const handler = apiRoutes.get(methodAndPath);
-      if (handler) {
-        handler(req, res);
-      }
     } else {
-      const notFoundBody = JSON.stringify({ error: 'Not Found', path: urlPath });
-      res.writeHead(404, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(notFoundBody),
-        'Connection': 'keep-alive',
-      });
-      res.end(notFoundBody);
+      const routeMatch = matchRoute(req.method || 'GET', urlPath || '/');
+      if (routeMatch) {
+        (req as any).params = routeMatch.params;
+        routeMatch.handler(req, res);
+      } else {
+        const notFoundBody = JSON.stringify({ error: 'Not Found', path: urlPath });
+        res.writeHead(404, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(notFoundBody),
+          'Connection': 'keep-alive',
+        });
+        res.end(notFoundBody);
+      }
     }
   });
 

@@ -4,6 +4,20 @@ Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumen
 
 ## [Unreleased] - 2026-09-24
 
+### Hinzugefügt
+- **Patient Onboarding Revamp & Dynamischer Anamnese-Fragebogen (`patient-onboarding`)**:
+  - `event-stream.ts`: Dynamische Routen-Erkennung (`matchRoute()`) im Microkernel implementiert. Parameter wie `:insuranceNumber` werden automatisch extrahiert und als `req.params` an Plugin-Routen übergeben.
+  - `plugins/patient-onboarding/index.ts`:
+    - `GET /api/onboarding/patient/:insuranceNumber`: Profil-Lookup für Bestandspatienten nach `patient:<insuranceNumber>` mit Historie (`lastVisit`, `upcomingAppointment`) und 404-Fallback.
+    - `GET /api/onboarding/schema` & `POST /api/onboarding/schema`: Dynamische Verwaltung und Speicherung des Formular-Schemas in `PluginData` (`key = 'form_schema'`) mit Fallback auf Standardfelder (Beschwerden [textarea], Schmerzskala [scale 1-10], Allergien, Dauermedikation, Schwangerschaft).
+    - `POST /api/onboarding/submit`: Persistiert Aufnahmevorgänge (`intake:<id>`) mit Status `REGISTERED`, speichert bei `saveProfile === true` das Patientenprofil für Folgebesuche und triggert das Kernel-SSE-Event `NEW_PATIENT`.
+  - `PatientForm.tsx` (`PatientOnboarding.tsx`):
+    - Mehrstufiger Self-Service-Flow im Soft-UI-Design (`bg-[#FAFAF9]`, Glassmorphism, Weichzeichner).
+    - Willkommens-Screen mit zwei Wegen: [A] Bestandspatienten-Login per Versichertennummer mit automatischer Begrüßungskarte und Überspringen der Stammdaten sowie [B] Neuanmeldung.
+    - Dynamischer Fragebogen-Renderer für Schema-Typen `text`, `textarea`, `scale` (1-10 mit Farbcodes), `boolean` (Touch-Toggles) und `select`.
+    - Abschluss-Bildschirm mit "Daten merken"-Checkbox (`saveProfile`) und animiertem Erfolgs-Screen samt Aufruf-Ticket.
+  - `ReceptionDashboard.tsx`: Adapter zur nahtlosen Anzeige strukturierter Formularantworten im Empfangs-Dashboard.
+
 ### Behoben
 - **Dynamisches Plugin-Lifecycle & Route-Guarding bei deinstallierten Modulen**:
   - `plugin-loader.ts` & `event-stream.ts`: `KernelContext` deregistriert beim Unload oder Deinstallieren eines Plugins nun automatisch alle registrierten API-Routen (`unregisterPluginRoutes(name)`). Aufrufe an Endpunkte deinstallierter Module (z.B. `/api/onboarding/submit`, `/api/onboarding/list`) laufen künftig ins reguläre 404 mit standardisiertem JSON-Body und `Content-Length`.
