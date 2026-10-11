@@ -1,0 +1,21 @@
+{
+  "name": "medication-safety",
+  "version": "1.1.0",
+  "description": "AMTS (Arzneimitteltherapiesicherheit) Echtzeit-Prüfung. Erkennt potenziell letale Wechselwirkungen, Kontraindikationen und Dosierungsfehler bei Arzneimittelverordnungen gegen Patientenallergien und Laborwerte.",
+  "author": "Klinische Pharmakologie",
+  "icon": "💊",
+  "category": "Patientensicherheit & AMTS",
+  "entry": "index.ts",
+  "dependencies": [
+    {
+      "id": "database-core",
+      "name": "Zentrale Datenbank"
+    }
+  ],
+  "routes": [
+    {
+      "name": "AMTS Sicherheits-Monitor",
+      "path": "/yeti/medication"
+    }
+  ]
+}

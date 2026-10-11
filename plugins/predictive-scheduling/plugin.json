@@ -1,0 +1,21 @@
+{
+  "name": "predictive-scheduling",
+  "version": "1.2.0",
+  "description": "KI-gestützte stochastische Dienst- und OP-Saal-Planung auf Basis von Markov-Entscheidungsprozessen (MDP) und Bellman-Optimierung. Prognostiziert Patientenaufkommen und minimiert Personalüberlastung sowie OP-Leerlaufzeiten.",
+  "author": "MedOS AI Research",
+  "icon": "📅",
+  "category": "Ressourcen- & OP-Planung",
+  "entry": "index.ts",
+  "dependencies": [
+    {
+      "id": "database-core",
+      "name": "Zentrale Datenbank"
+    }
+  ],
+  "routes": [
+    {
+      "name": "Dienstplan-Matrix",
+      "path": "/yeti/scheduling"
+    }
+  ]
+}

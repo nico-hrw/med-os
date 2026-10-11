@@ -2,6 +2,35 @@
 
 Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumentiert.
 
+## [Unreleased] - 2026-10-11
+
+### Hinzugefügt
+- **Revamp der System-Topologie & Aufklappbare Modul-Architektur (`TopologyMap.tsx`)**:
+  - **Reale System-Infrastruktur statt Dummy-Knoten**:
+    - Der bisherige Test-Knoten `database-core` ("⚠️ Fehlt") wurde vollständig durch den tatsächlichen Infrastruktur-Knoten `Zentrale Datenbank (Prisma Layer)` abgelöst.
+    - Vollständige Einbindung der MedOS System-Infrastruktur: `Microkernel Core` (Event-Bus, Port 4000), `Zentrale Datenbank` (Prisma ORM Scoped Data Partitioning), `Nginx Gateway & Proxy` (SSL/TLS 1.3, HTTP/2, SSE Stream Bypass) und `Klinische Terminals & SPA` (React 18, persistenter EventContext).
+    - Alle Plugin-Abhängigkeiten zur zentralen Datenbank werden nun als valide, aktive Kanten visualisiert.
+  - **Interaktives Plugin-Aufklappen ("Aufbau erklären")**:
+    - Jedes Plugin (sowohl aktive Module als auch Store-Erweiterungen) besitzt nun einen direkten Toggle-Button `[ 🔍 Aufbau aufklappen ]` / `[ ▲ Aufbau einklappen ]`.
+    - Beim Aufklappen entfaltet sich das Plugin im ReactFlow-Graphen hierarchisch in 4 dedizierte Architektur-Subkomponenten:
+      1. `[UI-Schicht]` (Indigo `#6366f1`): Screens & Views (z.B. `PatientForm.tsx`, `ReceptionDashboard.tsx`), MTS Triage Flow, Touch-Optimierung.
+      2. `[REST-API]` (Sky `#0284c7`): Registrierte Microkernel-Endpunkte mit Parametern, HTTP-Methoden und Antwort-Snippets.
+      3. `[Datenmodell]` (Amber `#d97706`): Scoped Storage über `PluginDBProxy`, Key-Patterns (`intake:*`, `patient:*`), In-Memory Resilienz.
+      4. `[Lifecycle]` (Emerald `#059669`): Broadcast SSE-Events (`NEW_PATIENT`, etc.), Lifecycle-Hooks (`onLoad`, `onEnable`, `onUninstall`), Context-Sandboxing (`Object.freeze`).
+    - Animierte, farbcodierte Kanten verbinden das Plugin mit seinen Sub-Komponenten.
+  - **Erweiterte Werkzeugleiste & Filter**:
+    - Filter-Tabs: `Alle Komponenten`, `Klinische Module`, `Nur Aktive`, `Infrastruktur & Core`.
+    - Globale Schnellsteuerungen: `[ Alle Plugins aufklappen ]`, `[ Alle einklappen ]`, `[ Ansicht zentrieren ]`.
+    - Live-Suche zur sofortigen Hervorhebung passender Knoten.
+    - Übersichtliche Farb-Legende für alle Knotentypen und Architektur-Schichten.
+  - **Interaktiver InfoPanel Architektur-Explorator (`InfoPanel.tsx`)**:
+    - Klick auf einen Plugin-Knoten öffnet eine tabulierte Übersicht mit Direktzugriff auf UI, API, Datenmodell und Lifecycle sowie einen Button zum synchronen Aufklappen im Graphen.
+    - Klick auf einen Komponenten-Subknoten öffnet einen tiefgehenden Drilldown mit Source-Dateien, Endpunkten, Schemadefinitionen und Sicherheitsaspekten.
+  - **Reales Plugin-Ökosystem**:
+    - `predictive-scheduling`: Stochastische Dienst- und OP-Planung mit Bellman/MDP-Modell als aktives Plugin integriert.
+    - `hl7-fhir-bridge`: Interoperabilitäts-Gateway (HL7 v2 / FHIR R4) im Plugin-Store bereitgestellt.
+    - `medication-safety`: AMTS-Prüfmodul für Wechselwirkungen und Patientensicherheit im Plugin-Store bereitgestellt.
+
 ## [Unreleased] - 2026-09-24
 
 ### Hinzugefügt

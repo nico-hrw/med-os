@@ -6,13 +6,21 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
   const isHorizontal = direction === 'LR';
-  const nodeWidth = 280;
-  const nodeHeight = 140;
 
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 100, ranksep: 130 });
+  // Angenehme Knoten- und Rangabstände für übersichtliche Baum- und Graphenstrukturen
+  dagreGraph.setGraph({ 
+    rankdir: direction, 
+    nodesep: 65, 
+    ranksep: 100,
+    align: 'DL',
+  });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    const isComponent = node.data?.status === 'component';
+    const width = isComponent ? 260 : 280;
+    const height = isComponent ? 125 : 145;
+
+    dagreGraph.setNode(node.id, { width, height });
   });
 
   edges.forEach((edge) => {
@@ -23,12 +31,16 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'T
 
   nodes.forEach((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const isComponent = node.data?.status === 'component';
+    const width = isComponent ? 260 : 280;
+    const height = isComponent ? 125 : 145;
+
     node.targetPosition = isHorizontal ? Position.Left : Position.Top;
     node.sourcePosition = isHorizontal ? Position.Right : Position.Bottom;
 
     node.position = {
-      x: nodeWithPosition.x - nodeWidth / 2,
-      y: nodeWithPosition.y - nodeHeight / 2,
+      x: nodeWithPosition.x - width / 2,
+      y: nodeWithPosition.y - height / 2,
     };
   });
 
