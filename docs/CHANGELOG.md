@@ -12,13 +12,14 @@ Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumen
   - **Schmales vertikales Mehrspalten-Layout & Lesbarkeits-Optimierung (`layout.ts`)**:
     - Das bisherige horizontale Ausufern über mehrere Bildschirmbreiten wurde durch eine deterministische 2-Spalten-Architektur ("schmal nach unten") abgelöst: Linke Spalte für die vertikal gestapelte Infrastruktur (`database-core`, `nginx-gateway`, `frontend-spa`), rechte Spalte für klinische Plugins und deren hierarchisch darunter eingerückte Sub-Komponenten.
     - Maximale Gesamtbreite des Graphen auf ~680px begrenzt. Dadurch entfällt das unleserliche Herauszoomen vollständig.
-    - **Großes, zentriertes Fokus-Zooming**: Die Topologie startet nun direkt lesbar herangezoomt (`zoom: 0.95`). Klicks oder Tastatur-Fokussierungen zentrieren den Zielknoten weich (`setCenter()`) bei optimaler Lesbarkeit.
-  - **Interaktive Pfeiltasten-Navigation (`↑`, `↓`, `←`, `→`)**:
+    - **Großes, zentriertes Fokus-Zooming neben dem Info-Slider**: Bei geöffnetem Info-Panel werden Knoten nicht mehr in der Mitte des Gesamtbildschirms (halb verdeckt) positioniert, sondern exakt im verbleibenden sichtbaren Bereich zwischen Sidebar und Info-Slider zentriert.
+  - **Interaktive Pfeiltasten-Navigation (`↑`, `↓`, `←`, `→`) & Positions-Sperre**:
     - Nutzer können den Verbindungen und hierarchischen Relationen des Graphen direkt über die Pfeiltasten folgen:
       - `↓` (Pfeil nach unten): Folgt ausgehenden Kanten zu Kind-Knoten (z.B. vom Plugin zu den Subkomponenten `UI` -> `API` -> `Data` -> `Lifecycle`) oder wechselt zum nächsten Knoten darunter.
       - `↑` (Pfeil nach oben): Folgt eingehenden Kanten zu Elternknoten (z.B. von Subkomponente zurück zum Plugin oder zum Microkernel).
       - `→` / `←` (Pfeil rechts/links): Springt horizontal zwischen der Infrastruktur- und der Plugin-Spalte hin und her.
       - `Enter` / `Leertaste`: Klappt den Aufbau des aktuell fokussierten Plugins auf oder zu.
+      - **Knoten-Positionen fixiert**: `nodesDraggable={false}`, `handleNodesChange` filtert Positionsänderungen und `capture: true` fängt Pfeiltastenevents vor ReactFlow ab, wodurch Knoten durch Pfeiltasten niemals mehr ungewollt verschoben oder bewegt werden.
       - Sichtbarer Tastatur-Hinweis (`⌨️ Pfeiltasten ↑ ↓ ← →`) in der Kopfleiste integriert.
   - **Interaktives Plugin-Aufklappen ("Aufbau erklären")**:
     - Jedes Plugin (sowohl aktive Module als auch Store-Erweiterungen) besitzt nun einen direkten Toggle-Button `[ 🔍 Aufbau aufklappen ]` / `[ ▲ Aufbau einklappen ]`.

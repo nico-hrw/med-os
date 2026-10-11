@@ -4,6 +4,7 @@ import ReactFlow, {
   Controls, 
   Edge, 
   Node, 
+  NodeChange,
   ConnectionLineType,
   useNodesState,
   useEdgesState,
@@ -72,8 +73,24 @@ export const TopologyMap: React.FC = () => {
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
 
-  // Zentriert die Ansicht komfortabel und herangezoomt auf einen Knoten (wie in Screenshot 2 gewünscht)
-  const centerOnNode = useCallback((nodeId: string, customZoom = 0.95, duration = 350) => {
+  // Filtert versehentliche 'position' Änderungen heraus, damit Tastatur oder Dragging Knoten nie verschiebt
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const filtered = changes.filter((c) => c.type !== 'position');
+      if (filtered.length > 0) {
+        onNodesChange(filtered);
+      }
+    },
+    [onNodesChange]
+  );
+
+  // Zentriert die Ansicht komfortabel auf einen Knoten – genau im sichtbaren Bereich neben dem Info-Panel!
+  const centerOnNode = useCallback((
+    nodeId: string, 
+    customZoom = 0.95, 
+    isPanelOpen?: boolean, 
+    duration = 350
+  ) => {
     if (!reactFlowInstanceRef.current) return;
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return;
@@ -85,8 +102,15 @@ export const TopologyMap: React.FC = () => {
     const cx = node.position.x + width / 2;
     const cy = node.position.y + height / 2;
 
-    reactFlowInstanceRef.current.setCenter(cx, cy, { zoom: customZoom, duration });
-  }, [nodes]);
+    // Auf Desktops (lg, >= 1024px) nimmt der Info-Slider rechts 30rem (480px) ein.
+    // Um den Knoten genau im freien linken Bereich (zwischen Sidebar und Slider) zentriert anzuzeigen:
+    // Verschieben wir den Fokuspunkt um 240px / zoom nach rechts, sodass der Knoten um 240px nach links rückt!
+    const panelVisible = isPanelOpen !== undefined ? isPanelOpen : Boolean(selectedNodeData);
+    const isLargeScreen = typeof window !== 'undefined' && window.innerWidth >= 1024;
+    const offsetX = isLargeScreen && panelVisible ? (240 / customZoom) : 0;
+
+    reactFlowInstanceRef.current.setCenter(cx + offsetX, cy, { zoom: customZoom, duration });
+  }, [nodes, selectedNodeData]);
 
   // Handler zum Umschalten des Aufklapp-Status eines Plugins
   const togglePluginExpand = useCallback((pluginId: string) => {
@@ -527,8 +551,8 @@ export const TopologyMap: React.FC = () => {
         initialCenteredRef.current = true;
         setSelectedNodeData(target.data);
         setTimeout(() => {
-          centerOnNode(target.id, 0.95, 500);
-        }, 100);
+          centerOnNode(target.id, 0.95, true, 450);
+        }, 150);
       }
     }
   }, [nodes, centerOnNode]);
@@ -545,6 +569,10 @@ export const TopologyMap: React.FC = () => {
       const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' '];
       if (!keys.includes(e.key)) return;
 
+      // Event sofort stoppen, damit ReactFlow interne Node-Verschiebungen niemals ausführt!
+      e.preventDefault();
+      e.stopPropagation();
+
       if (nodes.length === 0) return;
 
       // Ermittle den aktuellen Knoten
@@ -556,9 +584,8 @@ export const TopologyMap: React.FC = () => {
         // Fallback: Wähle das erste aktive Plugin oder den Kernel
         const fallback = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0];
         if (fallback) {
-          e.preventDefault();
           setSelectedNodeData(fallback.data);
-          centerOnNode(fallback.id, 0.95);
+          centerOnNode(fallback.id, 0.95, true, 350);
         }
         return;
       }
@@ -566,7 +593,6 @@ export const TopologyMap: React.FC = () => {
       // Enter / Leertaste: Plugin-Aufbau aufklappen / einklappen
       if (e.key === 'Enter' || e.key === ' ') {
         if (current.data.isPlugin && (current.data.technicalId || current.data.pluginId)) {
-          e.preventDefault();
           togglePluginExpand((current.data.technicalId || current.data.pluginId)!);
         }
         return;
@@ -579,11 +605,9 @@ export const TopologyMap: React.FC = () => {
       const incoming = edges.filter((edge) => edge.target === current.id).map((edge) => edge.source);
 
       if (e.key === 'ArrowDown') {
-        e.preventDefault();
         // 1. Priorität: Verknüpfte Kind-Knoten unterhalb des aktuellen Knotens
         const connectedBelow = nodes.filter((n) => outgoing.includes(n.id) && n.position.y > current.position.y);
         if (connectedBelow.length > 0) {
-          // Den am nächsten liegenden Knoten wählen
           connectedBelow.sort((a, b) => a.position.y - b.position.y);
           nextNode = connectedBelow[0];
         } else {
@@ -601,7 +625,6 @@ export const TopologyMap: React.FC = () => {
           }
         }
       } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
         // 1. Priorität: Verknüpfte Eltern-Knoten oberhalb des aktuellen Knotens
         const connectedAbove = nodes.filter((n) => incoming.includes(n.id) && n.position.y < current.position.y);
         if (connectedAbove.length > 0) {
@@ -622,7 +645,6 @@ export const TopologyMap: React.FC = () => {
           }
         }
       } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
         // Wechsel von Infrastruktur (links) zu Plugins (rechts) oder verknüpften Knoten rechts
         const nodesRight = nodes.filter((n) => n.id !== current.id && n.position.x > current.position.x + 80);
         if (nodesRight.length > 0) {
@@ -634,7 +656,6 @@ export const TopologyMap: React.FC = () => {
           nextNode = nodesRight[0];
         }
       } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
         // Wechsel von Plugins (rechts) zu Infrastruktur (links)
         const nodesLeft = nodes.filter((n) => n.id !== current.id && n.position.x < current.position.x - 80);
         if (nodesLeft.length > 0) {
@@ -649,7 +670,7 @@ export const TopologyMap: React.FC = () => {
 
       if (nextNode) {
         setSelectedNodeData(nextNode.data);
-        centerOnNode(nextNode.id, 0.95);
+        centerOnNode(nextNode.id, 0.95, true, 350);
 
         // Kanten-Hervorhebung
         setEdges((eds) =>
@@ -669,8 +690,9 @@ export const TopologyMap: React.FC = () => {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Capture-Phase zwingend nutzen, damit ReactFlow das Event keinesfalls abfängt!
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [nodes, edges, selectedNodeData, centerOnNode, togglePluginExpand, setEdges]);
 
   // Live-Synchronisation über zentralen SSE-Stream
@@ -689,7 +711,7 @@ export const TopologyMap: React.FC = () => {
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedNodeData(node.data as CustomNodeData);
-    centerOnNode(node.id, 0.95);
+    centerOnNode(node.id, 0.95, true, 350);
     
     // Highlight verbundener Kanten
     setEdges((eds) => 
@@ -748,10 +770,12 @@ export const TopologyMap: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                const target = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0];
+                const target = selectedNodeData
+                  ? (nodes.find((n) => n.data.technicalId === selectedNodeData.technicalId || n.id === selectedNodeData.technicalId) || nodes[0])
+                  : (nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0]);
                 if (target) {
                   setSelectedNodeData(target.data);
-                  centerOnNode(target.id, 0.95);
+                  centerOnNode(target.id, 0.95, Boolean(selectedNodeData), 400);
                 }
               }}
               className="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-900 hover:bg-stone-800 text-stone-50 transition-all active:scale-95 flex items-center gap-1.5"
@@ -871,20 +895,18 @@ export const TopologyMap: React.FC = () => {
 
       {/* Haupt-Canvas */}
       <div className="flex-1 w-full relative overflow-hidden">
-        <div 
-          className={`
-            w-full h-full transition-[margin-right] duration-500 ease-out
-            ${selectedNodeData ? 'mr-0 lg:mr-[30rem]' : 'mr-0'}
-          `}
-        >
+        <div className="w-full h-full relative">
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={true}
             connectionLineType={ConnectionLineType.SmoothStep}
             onInit={(instance) => {
               reactFlowInstanceRef.current = instance;
@@ -903,10 +925,18 @@ export const TopologyMap: React.FC = () => {
         <InfoPanel 
           nodeData={selectedNodeData} 
           onClose={() => {
+            const lastId = selectedNodeData?.technicalId || selectedNodeData?.pluginId;
             setSelectedNodeData(null);
             setEdges((eds) => 
               eds.map((edge) => ({ ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false }))
             );
+            if (lastId && reactFlowInstanceRef.current) {
+              const node = nodes.find((n) => n.data.technicalId === lastId || n.id === lastId);
+              if (node) {
+                // Bei geschlossenem Slider zentriert ohne Offset (isPanelOpen = false)
+                centerOnNode(node.id, 0.95, false, 350);
+              }
+            }
           }}
           onToggleExpand={togglePluginExpand}
           isExpanded={selectedNodeData ? expandedPluginIds.has(selectedNodeData.technicalId || selectedNodeData.pluginId || '') : false}
