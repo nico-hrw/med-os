@@ -5,6 +5,19 @@ Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumen
 ## [Unreleased] - 2026-10-11
 
 ### Hinzugefügt
+- **Optimierung & Ergonomie der System-Topologie (`TopologyMap.tsx`, `CustomNode.tsx`, `layout.ts`)**:
+  - **Kopfbereich aufgeräumt (Decluttering)**:
+    - Beseitigung redundanter Erklärungstexte, Untertitel und der 8-teiligen Legende zugunsten einer schlanken, einzeiligen Werkzeugleiste (`🏔️ Topologie ● Live`, kompakte Filter-Tabs, Icon-Aktionen und Schnellsuche).
+  - **Prägnante Hervorhebung des aktiven Knotens**:
+    - Der aktuell ausgewählte/fokussierte Knoten wird unübersehbar mit leuchtendem 4px-Fokusring (`ring-amber-400` bzw. `ring-indigo-500`), Skalierung (`scale-[1.05]`) und einem schwebenden `● AKTIV`- bzw. `● FOKUS`-Badge hervorgehoben.
+    - Vollständige Synchronisation zwischen ReactFlow-Status (`node.selected`) und internem State (`data.isSelected`) bei Tastaturnavigation, Klick und Initial-Fokus.
+  - **Erweiterte Pfeiltasten-Navigation mit Kandidaten-Auswahl & Cycling**:
+    - Alle Knoten über Pfeiltasten erreichbar. Bei Verzweigungen (z.B. vom Microkernel zu Kindmodulen oder beim horizontalen Spaltenwechsel) wird der Nutzer nicht in einen starren Pfad gezwungen:
+    - Wiederholtes Drücken derselben Pfeiltaste schaltet zyklisch durch alle passenden Zielknoten.
+    - Ein dezentes, schwebendes On-Screen-Menü blendet die Optionen (`Auswahl (1/N): [Knoten A] [Knoten B]`) ein, die auch direkt per Klick wählbar sind.
+  - **Ausgewogenes 3-Spalten-Layout (Verhindert die endlose 1-Spalten-Kette)**:
+    - Aufteilung in 3 logische Lanes: Spalte 1 (Infrastruktur links, x=40), Spalte 2 (Aktive Module + Subkomponenten mittig, x=365) und Spalte 3 (Store-Erweiterungen rechts, x=690) mit dem Kernel zentriert darüber (Gesamtbreite ~970px).
+    - Halbiert/drittelt die vertikale Höhe des Graphen und beseitigt die lange Listenoptik vollständig.
 - **Revamp der System-Topologie & Aufklappbare Modul-Architektur (`TopologyMap.tsx`)**:
   - **Reale System-Infrastruktur statt Dummy-Knoten**:
     - Der bisherige Test-Knoten `database-core` ("⚠️ Fehlt") wurde vollständig durch den tatsächlichen Infrastruktur-Knoten `Zentrale Datenbank (Prisma Layer)` abgelöst.

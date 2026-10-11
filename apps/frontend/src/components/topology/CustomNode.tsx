@@ -41,9 +41,12 @@ export interface CustomNodeData {
   parentPluginTitle?: string;
   componentItemsSummary?: string;
   icon?: string;
+  isSelected?: boolean;
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => {
+  const isCurrentlySelected = Boolean(selected || data.isSelected);
+
   // Spezialansicht für aufgeklappte Komponenten-Knoten (UI, API, Data, Lifecycle)
   if (data.status === 'component') {
     const categoryConfigs: Record<ComponentCategory, { bg: string; border: string; text: string; badgeBg: string; icon: string; title: string }> = {
@@ -88,12 +91,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected
       <div
         title={`${data.label} (Komponente von ${data.parentPluginTitle || 'Plugin'})`}
         className={`
-          w-[260px] h-[125px] p-3.5 rounded-2xl border backdrop-blur-md transition-all duration-200
-          flex flex-col justify-between overflow-hidden cursor-pointer select-none
+          relative w-[260px] h-[125px] p-3.5 rounded-2xl border backdrop-blur-md transition-all duration-200
+          flex flex-col justify-between cursor-pointer select-none
           ${config.bg} ${config.border} ${config.text}
-          ${selected ? 'ring-2 ring-indigo-500 shadow-xl scale-[1.03] z-50' : 'shadow-xs hover:shadow-md hover:scale-[1.01]'}
+          ${isCurrentlySelected 
+            ? 'ring-4 ring-indigo-500 ring-offset-2 ring-offset-white/80 shadow-[0_0_35px_rgba(99,102,241,0.5)] scale-[1.05] z-50' 
+            : 'shadow-xs hover:shadow-md hover:scale-[1.01]'}
         `}
       >
+        {isCurrentlySelected && (
+          <div className="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full bg-indigo-600 text-white font-mono text-[9px] font-bold shadow-md tracking-wider flex items-center gap-1 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+            <span>FOKUS</span>
+          </div>
+        )}
+
         <Handle type="target" position={Position.Top} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
         <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
 
@@ -172,12 +184,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected
     <div 
       title={tooltipText}
       className={`
-        w-[280px] h-[145px] p-4 rounded-2xl border backdrop-blur-md transition-all duration-200
-        flex flex-col justify-between overflow-hidden cursor-pointer select-none
+        relative w-[280px] h-[145px] p-4 rounded-2xl border backdrop-blur-md transition-all duration-200
+        flex flex-col justify-between cursor-pointer select-none
         ${statusColors[data.status]} 
-        ${selected ? 'ring-2 ring-amber-400 shadow-xl scale-[1.03] z-50' : 'shadow-xs hover:shadow-md hover:scale-[1.01]'}
+        ${isCurrentlySelected 
+          ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-stone-900/30 shadow-[0_0_40px_rgba(245,158,11,0.65)] scale-[1.05] z-50' 
+          : 'shadow-xs hover:shadow-md hover:scale-[1.01]'}
       `}
     >
+      {isCurrentlySelected && (
+        <div className="absolute -top-3 right-3 px-2.5 py-0.5 rounded-full bg-amber-400 text-stone-950 font-mono text-[10px] font-extrabold shadow-lg tracking-wider flex items-center gap-1.5 animate-pulse z-50">
+          <span className="w-1.5 h-1.5 rounded-full bg-stone-950"></span>
+          <span>AKTIV</span>
+        </div>
+      )}
+
       <Handle type="target" position={Position.Top} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
       <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-stone-400 !border-2 !border-white" />
 

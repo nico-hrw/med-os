@@ -28,38 +28,51 @@ export const getLayoutedElements = (
 
   const componentNodes = clonedNodes.filter((n) => n.data?.status === 'component');
 
-  const pluginNodes = clonedNodes.filter((n) => 
+  const allPluginNodes = clonedNodes.filter((n) => 
     n.id !== 'kernel-core' &&
     !infraNodes.includes(n) &&
     !componentNodes.includes(n) &&
     (n.data?.isPlugin || n.id.startsWith('plugin-') || n.id.startsWith('store-') || n.data?.status === 'active' || n.data?.status === 'store-available')
   );
 
-  // Aktive Plugins vor Store-Plugins
-  pluginNodes.sort((a, b) => {
-    if (a.data?.status === 'active' && b.data?.status !== 'active') return -1;
-    if (a.data?.status !== 'active' && b.data?.status === 'active') return 1;
-    return a.data.label.localeCompare(b.data.label);
-  });
+  // Trennung in Aktive Plugins (Spalte 2) und Store-Plugins (Spalte 3)
+  const activePluginNodes = allPluginNodes.filter((n) => n.data?.status === 'active');
+  const storePluginNodes = allPluginNodes.filter((n) => n.data?.status !== 'active');
+
+  activePluginNodes.sort((a, b) => a.data.label.localeCompare(b.data.label));
+  storePluginNodes.sort((a, b) => a.data.label.localeCompare(b.data.label));
 
   const hasInfra = infraNodes.length > 0;
-  const hasPlugins = pluginNodes.length > 0;
+  const hasActive = activePluginNodes.length > 0;
+  const hasStore = storePluginNodes.length > 0;
 
-  // Schmale Spalten-Geometrie: Verhindert horizontales Ausufern vollständig!
-  // Gesamte Graphbreite bleibt ca. 680px, sodass bei Zoom 0.9 - 1.0 alles perfekt lesbar ist.
-  let col1X = 40;  // Infrastruktur-Spalte links
-  let col2X = 390; // Plugin-Spalte rechts
-  let coreX = 215; // Kernel zentriert über beiden Spalten
+  // Ausgewogenes 3-Spalten-Layout: 
+  // Spalte 1: Infrastruktur (links)
+  // Spalte 2: Aktive Module + aufgeklappte Komponenten (mitte)
+  // Spalte 3: Store-Erweiterungen (rechts)
+  // Kern oben zentriert. Verhindert die endlose 1-Spalten-Liste komplett!
+  let col1X = 40;
+  let col2X = 365;
+  let col3X = 690;
+  let coreX = 365;
 
-  if (hasPlugins && !hasInfra) {
+  if (!hasInfra && hasActive && !hasStore) {
     col2X = 200;
     coreX = 200;
-  } else if (hasInfra && !hasPlugins) {
+  } else if (!hasInfra && hasActive && hasStore) {
+    col2X = 120;
+    col3X = 450;
+    coreX = 285;
+  } else if (hasInfra && hasActive && !hasStore) {
+    col1X = 40;
+    col2X = 365;
+    coreX = 200;
+  } else if (hasInfra && !hasActive && !hasStore) {
     col1X = 200;
     coreX = 200;
   }
 
-  const startY = 240;
+  const startY = 230;
 
   // 1. Kernel Core positionieren
   if (kernelNode) {
@@ -68,65 +81,77 @@ export const getLayoutedElements = (
     kernelNode.sourcePosition = Position.Bottom;
   }
 
-  // 2. Infrastruktur-Spalte vertikal nach unten anordnen
+  // 2. Infrastruktur-Spalte (Spalte 1)
   let infraY = startY;
   infraNodes.forEach((node) => {
     node.position = { x: col1X, y: infraY };
     node.targetPosition = Position.Top;
     node.sourcePosition = Position.Bottom;
-    infraY += 195; // 145px Knotenhöhe + 50px Abstand
+    infraY += 185; // 145px Höhe + 40px Abstand
   });
 
-  // 3. Plugin-Spalte vertikal nach unten anordnen samt aufgeklappten Komponenten
   const categoryOrder: ComponentCategory[] = ['ui', 'api', 'data', 'lifecycle'];
-  let pluginY = startY;
 
-  pluginNodes.forEach((pNode) => {
-    const pluginId = pNode.data.technicalId || pNode.data.pluginId || pNode.id.replace(/^(plugin-|store-)/, '');
-    
-    pNode.position = { x: col2X, y: pluginY };
-    pNode.targetPosition = Position.Top;
-    pNode.sourcePosition = Position.Bottom;
-    pluginY += 195;
+  // Helper zum Platzieren einer Plugin-Spalte samt Kind-Komponenten
+  const layoutPluginColumn = (columnNodes: Node<CustomNodeData>[], startColX: number) => {
+    let curY = startY;
 
-    // Finde Sub-Komponenten dieses Plugins
-    const comps = componentNodes.filter((c) => 
-      c.data.pluginId === pluginId || c.id.startsWith(`${pluginId}__comp_`)
-    );
+    columnNodes.forEach((pNode) => {
+      const pluginId = pNode.data.technicalId || pNode.data.pluginId || pNode.id.replace(/^(plugin-|store-)/, '');
 
-    if (comps.length > 0) {
-      comps.sort((a, b) => {
-        const catA = a.data.componentCategory ? categoryOrder.indexOf(a.data.componentCategory) : 0;
-        const catB = b.data.componentCategory ? categoryOrder.indexOf(b.data.componentCategory) : 0;
-        return catA - catB;
-      });
+      pNode.position = { x: startColX, y: curY };
+      pNode.targetPosition = Position.Top;
+      pNode.sourcePosition = Position.Bottom;
+      curY += 185;
 
-      comps.forEach((cNode) => {
-        // Leicht eingerückt (20px), sodass die Ast-Verbindung vom Plugin visuell sauber wirkt
-        cNode.position = { x: col2X + 20, y: pluginY };
-        cNode.targetPosition = Position.Left;
-        cNode.sourcePosition = Position.Bottom;
-        pluginY += 155; // 125px Knotenhöhe + 30px Abstand
-      });
+      // Finde aufgeklappte Sub-Komponenten dieses Plugins
+      const comps = componentNodes.filter((c) => 
+        c.data.pluginId === pluginId || c.id.startsWith(`${pluginId}__comp_`)
+      );
 
-      pluginY += 15; // Zusätzlicher Puffer vor dem nächsten Plugin
-    }
-  });
+      if (comps.length > 0) {
+        comps.sort((a, b) => {
+          const catA = a.data.componentCategory ? categoryOrder.indexOf(a.data.componentCategory) : 0;
+          const catB = b.data.componentCategory ? categoryOrder.indexOf(b.data.componentCategory) : 0;
+          return catA - catB;
+        });
+
+        comps.forEach((cNode) => {
+          cNode.position = { x: startColX + 15, y: curY };
+          cNode.targetPosition = Position.Left;
+          cNode.sourcePosition = Position.Bottom;
+          curY += 150; // 125px Höhe + 25px Abstand
+        });
+
+        curY += 15; // Visueller Puffer
+      }
+    });
+
+    return curY;
+  };
+
+  // 3. Spalte 2: Aktive Plugins
+  layoutPluginColumn(activePluginNodes, col2X);
+
+  // 4. Spalte 3: Store-Erweiterungen
+  layoutPluginColumn(storePluginNodes, col3X);
 
   // Fallback für sonstige Knoten
   const positionedIds = new Set([
     kernelNode?.id,
     ...infraNodes.map((n) => n.id),
-    ...pluginNodes.map((n) => n.id),
+    ...activePluginNodes.map((n) => n.id),
+    ...storePluginNodes.map((n) => n.id),
     ...componentNodes.map((n) => n.id),
   ]);
 
+  let fallbackY = startY;
   clonedNodes.forEach((node) => {
     if (!positionedIds.has(node.id)) {
-      node.position = { x: col2X, y: pluginY };
+      node.position = { x: col2X, y: fallbackY };
       node.targetPosition = Position.Top;
       node.sourcePosition = Position.Bottom;
-      pluginY += 180;
+      fallbackY += 180;
     }
   });
 

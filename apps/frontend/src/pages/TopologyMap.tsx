@@ -508,12 +508,28 @@ export const TopologyMap: React.FC = () => {
     const validNodeIds = new Set(filteredNodes.map((n) => n.id));
     const filteredEdges = rawEdges.filter((e) => validNodeIds.has(e.source) && validNodeIds.has(e.target));
 
-    // Deterministisches, schmales vertikales Layout (garantiert max. ~680px Breite)
+    // Deterministisches, ausgewogenes 3-Spalten-Layout (verhindert endlose vertikale Liste)
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(filteredNodes, filteredEdges, 'TB');
-    setNodes(layoutedNodes);
+    
+    // Aktive Selektion in den Layout-Knoten beibehalten
+    const layoutedNodesWithSelection = layoutedNodes.map((n) => {
+      const isMatch = selectedNodeData 
+        ? (n.id === selectedNodeData.technicalId || n.data.technicalId === selectedNodeData.technicalId || n.data.label === selectedNodeData.label)
+        : false;
+      return {
+        ...n,
+        selected: isMatch,
+        data: {
+          ...n.data,
+          isSelected: isMatch,
+        },
+      };
+    });
+
+    setNodes(layoutedNodesWithSelection);
     setEdges(layoutedEdges);
     setLoading(false);
-  }, [togglePluginExpand, setNodes, setEdges]);
+  }, [togglePluginExpand, setNodes, setEdges, selectedNodeData]);
 
   // Lädt aktive und im Store verfügbare Plugins
   const fetchTopologyData = useCallback(async () => {
@@ -543,37 +559,104 @@ export const TopologyMap: React.FC = () => {
     fetchTopologyData();
   }, [fetchTopologyData]);
 
-  // Initiales Fokussieren: Startet direkt herangezoomt auf ein Kern-Modul (Screenshot 2-Stil)
+  // Zustand für Mehrfachauswahl bei Tastatur-Navigation
+  const [candidates, setCandidates] = useState<{
+    nodes: Node<CustomNodeData>[];
+    currentIndex: number;
+    direction: string;
+  } | null>(null);
+
+  // Wählt einen Knoten aus, hebt ihn unübersehbar hervor und zentriert die Ansicht
+  const selectAndFocusNode = useCallback((
+    node: Node<CustomNodeData>, 
+    zoom = 0.95, 
+    customCandidates?: { nodes: Node<CustomNodeData>[]; currentIndex: number; direction: string } | null
+  ) => {
+    setSelectedNodeData(node.data);
+
+    // Synchronisiere ReactFlow node.selected und node.data.isSelected
+    setNodes((prevNodes) =>
+      prevNodes.map((n) => {
+        const isMatch = n.id === node.id;
+        if (n.selected === isMatch && n.data?.isSelected === isMatch) return n;
+        return {
+          ...n,
+          selected: isMatch,
+          data: {
+            ...n.data,
+            isSelected: isMatch,
+          },
+        };
+      })
+    );
+
+    // Kanten-Hervorhebung
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.source === node.id || edge.target === node.id) {
+          return { ...edge, style: { stroke: '#f59e0b', strokeWidth: 3 }, animated: true };
+        }
+        return { ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false };
+      })
+    );
+
+    if (customCandidates !== undefined) {
+      setCandidates(customCandidates);
+    }
+
+    centerOnNode(node.id, zoom, true, 350);
+  }, [centerOnNode, setNodes, setEdges]);
+
+  // Selektion zurücksetzen
+  const clearSelection = useCallback(() => {
+    setSelectedNodeData(null);
+    setCandidates(null);
+    setNodes((prevNodes) =>
+      prevNodes.map((n) => {
+        if (!n.selected && !n.data?.isSelected) return n;
+        return {
+          ...n,
+          selected: false,
+          data: { ...n.data, isSelected: false },
+        };
+      })
+    );
+    setEdges((eds) =>
+      eds.map((edge) => ({ ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false }))
+    );
+  }, [setNodes, setEdges]);
+
+  // Initiales Fokussieren: Startet direkt herangezoomt auf ein Kern-Modul
   useEffect(() => {
     if (!initialCenteredRef.current && nodes.length > 0 && reactFlowInstanceRef.current) {
       const target = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes.find((n) => n.id === 'kernel-core') || nodes[0];
       if (target) {
         initialCenteredRef.current = true;
-        setSelectedNodeData(target.data);
-        setTimeout(() => {
-          centerOnNode(target.id, 0.95, true, 450);
-        }, 150);
+        selectAndFocusNode(target, 0.95, null);
       }
     }
-  }, [nodes, centerOnNode]);
+  }, [nodes, selectAndFocusNode]);
 
   // ─────────────────────────────────────────────────────────────
-  // PFEILTASTEN-NAVIGATION: Verknüpfungen direkt mit ↑ ↓ ← → folgen
+  // PFEILTASTEN-NAVIGATION & MEHRFACHAUSWAHL (Point 3)
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Nicht navigieren, wenn der Nutzer im Suchfeld tippt
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
-      const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' '];
+      const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' ', 'Escape'];
       if (!keys.includes(e.key)) return;
 
-      // Event sofort stoppen, damit ReactFlow interne Node-Verschiebungen niemals ausführt!
       e.preventDefault();
       e.stopPropagation();
 
       if (nodes.length === 0) return;
+
+      if (e.key === 'Escape') {
+        setCandidates(null);
+        return;
+      }
 
       // Ermittle den aktuellen Knoten
       let current = selectedNodeData 
@@ -581,119 +664,146 @@ export const TopologyMap: React.FC = () => {
         : null;
 
       if (!current) {
-        // Fallback: Wähle das erste aktive Plugin oder den Kernel
         const fallback = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0];
         if (fallback) {
-          setSelectedNodeData(fallback.data);
-          centerOnNode(fallback.id, 0.95, true, 350);
+          selectAndFocusNode(fallback, 0.95, null);
         }
         return;
       }
 
-      // Enter / Leertaste: Plugin-Aufbau aufklappen / einklappen
+      // Enter / Leertaste: Plugin-Aufbau aufklappen / einklappen oder Kandidaten bestätigen
       if (e.key === 'Enter' || e.key === ' ') {
+        if (candidates) {
+          setCandidates(null);
+        }
         if (current.data.isPlugin && (current.data.technicalId || current.data.pluginId)) {
           togglePluginExpand((current.data.technicalId || current.data.pluginId)!);
         }
         return;
       }
 
-      let nextNode: Node<CustomNodeData> | null = null;
-
-      // Kanten des aktuellen Knotens
-      const outgoing = edges.filter((edge) => edge.source === current.id).map((edge) => edge.target);
-      const incoming = edges.filter((edge) => edge.target === current.id).map((edge) => edge.source);
-
-      if (e.key === 'ArrowDown') {
-        // 1. Priorität: Verknüpfte Kind-Knoten unterhalb des aktuellen Knotens
-        const connectedBelow = nodes.filter((n) => outgoing.includes(n.id) && n.position.y > current.position.y);
-        if (connectedBelow.length > 0) {
-          connectedBelow.sort((a, b) => a.position.y - b.position.y);
-          nextNode = connectedBelow[0];
-        } else {
-          // 2. Räumliche Priorität: Nächster Knoten darunter in derselben Spalte
-          const nodesBelow = nodes.filter((n) => n.id !== current.id && n.position.y > current.position.y + 20);
-          if (nodesBelow.length > 0) {
-            nodesBelow.sort((a, b) => {
-              const dyA = a.position.y - current.position.y;
-              const dyB = b.position.y - current.position.y;
-              const dxA = Math.abs(a.position.x - current.position.x);
-              const dxB = Math.abs(b.position.x - current.position.x);
-              return (dyA + dxA * 0.4) - (dyB + dxB * 0.4);
-            });
-            nextNode = nodesBelow[0];
-          }
-        }
-      } else if (e.key === 'ArrowUp') {
-        // 1. Priorität: Verknüpfte Eltern-Knoten oberhalb des aktuellen Knotens
-        const connectedAbove = nodes.filter((n) => incoming.includes(n.id) && n.position.y < current.position.y);
-        if (connectedAbove.length > 0) {
-          connectedAbove.sort((a, b) => b.position.y - a.position.y);
-          nextNode = connectedAbove[0];
-        } else {
-          // 2. Räumliche Priorität: Nächster Knoten darüber
-          const nodesAbove = nodes.filter((n) => n.id !== current.id && n.position.y < current.position.y - 20);
-          if (nodesAbove.length > 0) {
-            nodesAbove.sort((a, b) => {
-              const dyA = current.position.y - a.position.y;
-              const dyB = current.position.y - b.position.y;
-              const dxA = Math.abs(a.position.x - current.position.x);
-              const dxB = Math.abs(b.position.x - current.position.x);
-              return (dyA + dxA * 0.4) - (dyB + dxB * 0.4);
-            });
-            nextNode = nodesAbove[0];
-          }
-        }
-      } else if (e.key === 'ArrowRight') {
-        // Wechsel von Infrastruktur (links) zu Plugins (rechts) oder verknüpften Knoten rechts
-        const nodesRight = nodes.filter((n) => n.id !== current.id && n.position.x > current.position.x + 80);
-        if (nodesRight.length > 0) {
-          nodesRight.sort((a, b) => {
-            const dyA = Math.abs(a.position.y - current.position.y);
-            const dyB = Math.abs(b.position.y - current.position.y);
-            return dyA - dyB;
-          });
-          nextNode = nodesRight[0];
-        }
-      } else if (e.key === 'ArrowLeft') {
-        // Wechsel von Plugins (rechts) zu Infrastruktur (links)
-        const nodesLeft = nodes.filter((n) => n.id !== current.id && n.position.x < current.position.x - 80);
-        if (nodesLeft.length > 0) {
-          nodesLeft.sort((a, b) => {
-            const dyA = Math.abs(a.position.y - current.position.y);
-            const dyB = Math.abs(b.position.y - current.position.y);
-            return dyA - dyB;
-          });
-          nextNode = nodesLeft[0];
-        }
+      // Prüfe, ob aktuell bereits ein Kandidaten-Menü für dieselbe Pfeilrichtung aktiv ist
+      // Wenn ja, schaltet erneutes Drücken der Pfeiltaste zyklisch durch die Treffer!
+      if (candidates && candidates.direction === e.key && candidates.nodes.length > 1) {
+        const nextIdx = (candidates.currentIndex + 1) % candidates.nodes.length;
+        const nextCandidate = candidates.nodes[nextIdx];
+        selectAndFocusNode(nextCandidate, 0.95, {
+          ...candidates,
+          currentIndex: nextIdx,
+        });
+        return;
       }
 
-      if (nextNode) {
-        setSelectedNodeData(nextNode.data);
-        centerOnNode(nextNode.id, 0.95, true, 350);
+      // Spalten definieren anhand der X-Position
+      // Col 1: Infrastruktur (< 200px)
+      // Col 2: Aktive Plugins & Komponenten (200px - 550px)
+      // Col 3: Store-Erweiterungen (>= 550px)
+      const col1Nodes = nodes.filter((n) => n.id !== 'kernel-core' && n.position.x < 200);
+      const col2Nodes = nodes.filter((n) => n.id !== 'kernel-core' && n.position.x >= 200 && n.position.x < 550);
+      const col3Nodes = nodes.filter((n) => n.id !== 'kernel-core' && n.position.x >= 550);
 
-        // Kanten-Hervorhebung
-        setEdges((eds) =>
-          eds.map((edge) => {
-            if (
-              (edge.source === current!.id && edge.target === nextNode!.id) ||
-              (edge.target === current!.id && edge.source === nextNode!.id)
-            ) {
-              return { ...edge, style: { stroke: '#f59e0b', strokeWidth: 3 }, animated: true };
-            }
-            if (edge.source === nextNode!.id || edge.target === nextNode!.id) {
-              return { ...edge, style: { stroke: '#fbbf24', strokeWidth: 2.2 }, animated: true };
-            }
-            return { ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false };
-          })
-        );
+      const isKernel = current.id === 'kernel-core' || current.data.status === 'kernel';
+
+      // ─────────────────────────────────────────────────────────
+      // Navigation vom Microkernel aus
+      // ─────────────────────────────────────────────────────────
+      if (isKernel) {
+        if (e.key === 'ArrowDown') {
+          // Springt in Spalte 2 (Aktive Plugins)
+          const targets = col2Nodes.filter((n) => n.data.status === 'active').sort((a, b) => a.position.y - b.position.y);
+          if (targets.length > 0) {
+            selectAndFocusNode(targets[0], 0.95, targets.length > 1 ? { nodes: targets, currentIndex: 0, direction: 'ArrowDown' } : null);
+          }
+        } else if (e.key === 'ArrowLeft') {
+          // Springt in Spalte 1 (Infrastruktur)
+          const targets = col1Nodes.sort((a, b) => a.position.y - b.position.y);
+          if (targets.length > 0) {
+            selectAndFocusNode(targets[0], 0.95, targets.length > 1 ? { nodes: targets, currentIndex: 0, direction: 'ArrowLeft' } : null);
+          }
+        } else if (e.key === 'ArrowRight') {
+          // Springt in Spalte 3 (Store-Erweiterungen)
+          const targets = col3Nodes.filter((n) => n.data.status === 'store-available').sort((a, b) => a.position.y - b.position.y);
+          if (targets.length > 0) {
+            selectAndFocusNode(targets[0], 0.95, targets.length > 1 ? { nodes: targets, currentIndex: 0, direction: 'ArrowRight' } : null);
+          }
+        }
+        return;
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // Navigation innerhalb der 3 Spalten
+      // ─────────────────────────────────────────────────────────
+      const currentX = current.position.x;
+      const currentLane = currentX < 200 ? 1 : currentX < 550 ? 2 : 3;
+      const currentLaneNodes = currentLane === 1 ? col1Nodes : currentLane === 2 ? col2Nodes : col3Nodes;
+
+      if (e.key === 'ArrowUp') {
+        // Befindet sich der Knoten ganz oben in seiner Spalte? -> Zurück zum Microkernel
+        if (current.position.y <= 240) {
+          const kernel = nodes.find((n) => n.id === 'kernel-core');
+          if (kernel) {
+            selectAndFocusNode(kernel, 0.95, null);
+            return;
+          }
+        }
+
+        // Suche vorherigen Knoten in derselben Spalte
+        const aboveNodes = currentLaneNodes
+          .filter((n) => n.position.y < current.position.y - 10)
+          .sort((a, b) => b.position.y - a.position.y);
+
+        if (aboveNodes.length > 0) {
+          selectAndFocusNode(aboveNodes[0], 0.95, null);
+        } else {
+          // Fallback: Gehe zum Kernel
+          const kernel = nodes.find((n) => n.id === 'kernel-core');
+          if (kernel) selectAndFocusNode(kernel, 0.95, null);
+        }
+      } else if (e.key === 'ArrowDown') {
+        // Nächster Knoten darunter in derselben Spalte (schließt alle Subkomponenten ein!)
+        const belowNodes = currentLaneNodes
+          .filter((n) => n.position.y > current.position.y + 10)
+          .sort((a, b) => a.position.y - b.position.y);
+
+        if (belowNodes.length > 0) {
+          selectAndFocusNode(belowNodes[0], 0.95, null);
+        }
+      } else if (e.key === 'ArrowRight') {
+        // Spaltenwechsel nach rechts: Lane 1 -> Lane 2 -> Lane 3
+        const targetLaneNodes = currentLane === 1 ? col2Nodes : currentLane === 2 ? col3Nodes : [];
+        if (targetLaneNodes.length > 0) {
+          // Sortiere nach Y-Nähe
+          const sorted = [...targetLaneNodes].sort((a, b) => {
+            return Math.abs(a.position.y - current.position.y) - Math.abs(b.position.y - current.position.y);
+          });
+          // Biete die 2 bis 3 nächsten Knoten als Auswahlliste an
+          const candidateList = sorted.slice(0, Math.min(3, sorted.length));
+          selectAndFocusNode(
+            candidateList[0], 
+            0.95, 
+            candidateList.length > 1 ? { nodes: candidateList, currentIndex: 0, direction: 'ArrowRight' } : null
+          );
+        }
+      } else if (e.key === 'ArrowLeft') {
+        // Spaltenwechsel nach links: Lane 3 -> Lane 2 -> Lane 1
+        const targetLaneNodes = currentLane === 3 ? col2Nodes : currentLane === 2 ? col1Nodes : [];
+        if (targetLaneNodes.length > 0) {
+          const sorted = [...targetLaneNodes].sort((a, b) => {
+            return Math.abs(a.position.y - current.position.y) - Math.abs(b.position.y - current.position.y);
+          });
+          const candidateList = sorted.slice(0, Math.min(3, sorted.length));
+          selectAndFocusNode(
+            candidateList[0], 
+            0.95, 
+            candidateList.length > 1 ? { nodes: candidateList, currentIndex: 0, direction: 'ArrowLeft' } : null
+          );
+        }
       }
     };
 
-    // Capture-Phase zwingend nutzen, damit ReactFlow das Event keinesfalls abfängt!
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [nodes, edges, selectedNodeData, centerOnNode, togglePluginExpand, setEdges]);
+  }, [nodes, selectedNodeData, candidates, selectAndFocusNode, togglePluginExpand]);
 
   // Live-Synchronisation über zentralen SSE-Stream
   useKernelEvents(useCallback((data: any) => {
@@ -710,179 +820,125 @@ export const TopologyMap: React.FC = () => {
   }, [fetchTopologyData]));
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
-    setSelectedNodeData(node.data as CustomNodeData);
-    centerOnNode(node.id, 0.95, true, 350);
-    
-    // Highlight verbundener Kanten
-    setEdges((eds) => 
-      eds.map((edge) => {
-        if (edge.source === node.id || edge.target === node.id) {
-          return { ...edge, style: { stroke: '#f59e0b', strokeWidth: 2.8 }, animated: true };
-        }
-        return { ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false };
-      })
-    );
-  }, [centerOnNode, setEdges]);
+    selectAndFocusNode(node as Node<CustomNodeData>, 0.95, null);
+  }, [selectAndFocusNode]);
 
   const onPaneClick = useCallback(() => {
-    setSelectedNodeData(null);
-    setEdges((eds) => 
-      eds.map((edge) => ({ ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false }))
-    );
-  }, [setEdges]);
+    clearSelection();
+  }, [clearSelection]);
 
   return (
     <div className="relative w-full h-full min-h-[650px] bg-[#fcfbf9] rounded-3xl overflow-hidden border border-stone-200 shadow-sm flex flex-col">
-      {/* Kopfbereich & Filter-Werkzeugleiste */}
-      <div className="p-6 pb-4 bg-white/70 backdrop-blur-md border-b border-stone-200/70 z-10 flex flex-col gap-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">🏔️</span>
-              <h2 className="text-2xl font-serif text-stone-900 leading-tight">MedOS System-Topologie</h2>
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">
-                Live SSE aktiv
-              </span>
-            </div>
-            <p className="text-stone-500 text-xs mt-1">
-              Schlanke vertikale Visualisierung: Verwenden Sie die <strong>Pfeiltasten (↑ ↓ ← →)</strong>, um den Verknüpfungen fließend zu folgen
-            </p>
-          </div>
-
-          {/* Globale Aufklapp-Aktionen */}
+      {/* ─────────────────────────────────────────────────────────────
+          1. SCHLANKER, AUFGERÄUMTER KOPFBEREICH (Point 1: Kein Clutter)
+          ───────────────────────────────────────────────────────────── */}
+      <div className="px-5 py-3 bg-white/80 backdrop-blur-md border-b border-stone-200/80 z-10 flex flex-wrap items-center justify-between gap-3">
+        {/* Titel & Status */}
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={expandAllPlugins}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all active:scale-95 flex items-center gap-1.5"
-            >
-              <span>⊞</span>
-              <span>Alle Plugins aufklappen</span>
-            </button>
-            <button
-              type="button"
-              onClick={collapseAllPlugins}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all active:scale-95 flex items-center gap-1.5"
-            >
-              <span>⊟</span>
-              <span>Alle einklappen</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const target = selectedNodeData
-                  ? (nodes.find((n) => n.data.technicalId === selectedNodeData.technicalId || n.id === selectedNodeData.technicalId) || nodes[0])
-                  : (nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0]);
-                if (target) {
-                  setSelectedNodeData(target.data);
-                  centerOnNode(target.id, 0.95, Boolean(selectedNodeData), 400);
-                }
-              }}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-900 hover:bg-stone-800 text-stone-50 transition-all active:scale-95 flex items-center gap-1.5"
-            >
-              <span>⛶</span>
-              <span>Ansicht zentrieren</span>
-            </button>
+            <span className="text-lg">🏔️</span>
+            <h2 className="text-lg font-serif font-bold text-stone-900 tracking-tight">Topologie</h2>
           </div>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live</span>
+          </span>
         </div>
 
-        {/* Filter-Kacheln, Live-Suche & Tastatur-Hinweis */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setActiveFilter('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${activeFilter === 'all' ? 'bg-stone-900 text-stone-50' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
-            >
-              Alle Komponenten ({nodes.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveFilter('clinical')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${activeFilter === 'clinical' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}
-            >
-              <span>🏥</span>
-              <span>Klinische Module</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveFilter('active')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${activeFilter === 'active' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
-            >
-              <span>⚡</span>
-              <span>Nur Aktive</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveFilter('infra')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${activeFilter === 'infra' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-            >
-              <span>💾</span>
-              <span>Infrastruktur & Core</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200/80 text-[11px] text-stone-500 font-mono">
-              <span>⌨️</span>
-              <span>Pfeiltasten ↑ ↓ ← →</span>
-            </div>
-
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Komponente suchen..."
-                className="w-44 sm:w-56 px-3 py-1 text-xs bg-white rounded-lg border border-stone-200 focus:outline-none focus:border-stone-400 font-sans"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2 top-1 text-xs text-stone-400 hover:text-stone-600"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
+        {/* Ansichts-Filter */}
+        <div className="flex items-center gap-1 bg-stone-100/90 p-1 rounded-xl border border-stone-200/60">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+              activeFilter === 'all' ? 'bg-white text-stone-900 shadow-xs font-semibold' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Alle ({nodes.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter('clinical')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+              activeFilter === 'clinical' ? 'bg-white text-stone-900 shadow-xs font-semibold' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Klinisch
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter('active')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+              activeFilter === 'active' ? 'bg-white text-stone-900 shadow-xs font-semibold' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Aktiv
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter('infra')}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+              activeFilter === 'infra' ? 'bg-white text-stone-900 shadow-xs font-semibold' : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Infrastruktur
+          </button>
         </div>
 
-        {/* Legende */}
-        <div className="flex flex-wrap items-center gap-4 text-[11px] text-stone-500 pt-1 border-t border-stone-100">
-          <span className="font-semibold text-stone-700">Legende:</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-stone-900 border border-amber-400" />
-            <span>Microkernel</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-cyan-400" />
-            <span>Infrastruktur (DB, Gateway, Client)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>Aktives Plugin</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-stone-400 border border-dashed border-stone-600" />
-            <span>Verfügbares Store-Plugin</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded bg-indigo-500" />
-            <span>UI-Schicht</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded bg-sky-500" />
-            <span>REST-API</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded bg-amber-500" />
-            <span>Datenmodell</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded bg-emerald-500" />
-            <span>Lifecycle</span>
+        {/* Aktionen & Suche */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={expandAllPlugins}
+            title="Alle Plugins aufklappen"
+            className="p-1.5 px-2.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all flex items-center gap-1 active:scale-95"
+          >
+            <span>⊞</span>
+            <span className="hidden sm:inline text-[11px]">Aufklappen</span>
+          </button>
+          <button
+            type="button"
+            onClick={collapseAllPlugins}
+            title="Alle Plugins einklappen"
+            className="p-1.5 px-2.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all flex items-center gap-1 active:scale-95"
+          >
+            <span>⊟</span>
+            <span className="hidden sm:inline text-[11px]">Einklappen</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const target = selectedNodeData
+                ? (nodes.find((n) => n.data.technicalId === selectedNodeData.technicalId || n.id === selectedNodeData.technicalId) || nodes[0])
+                : (nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0]);
+              if (target) {
+                selectAndFocusNode(target, 0.95, null);
+              }
+            }}
+            title="Ansicht auf aktiven Knoten zentrieren"
+            className="p-1.5 px-2.5 rounded-xl text-xs font-medium bg-stone-900 hover:bg-stone-800 text-white transition-all flex items-center gap-1 active:scale-95"
+          >
+            <span>⛶</span>
+            <span className="hidden sm:inline text-[11px]">Zentrieren</span>
+          </button>
+
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Suchen..."
+              className="w-32 sm:w-44 px-2.5 py-1 text-xs bg-stone-100/90 rounded-lg border border-stone-200 focus:bg-white focus:outline-none focus:border-stone-400 font-sans"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1 text-xs text-stone-400 hover:text-stone-600"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -920,20 +976,51 @@ export const TopologyMap: React.FC = () => {
             <Controls className="!bg-white !border-stone-200 !shadow-sm fill-stone-600 !rounded-xl overflow-hidden" showInteractive={false} />
           </ReactFlow>
         </div>
+
+        {/* ─────────────────────────────────────────────────────────────
+            KANDIDATEN-AUSWAHL BEI MEHRFACH-TREFFERN (Point 3)
+            ───────────────────────────────────────────────────────────── */}
+        {candidates && candidates.nodes.length > 1 && (
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 bg-stone-900/95 text-white backdrop-blur-md px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-3 border border-amber-500/40 text-xs">
+            <span className="text-amber-400 font-mono font-bold text-[11px] whitespace-nowrap">
+              Auswahl ({candidates.currentIndex + 1}/{candidates.nodes.length}):
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-[400px] py-0.5">
+              {candidates.nodes.map((cand, idx) => (
+                <button
+                  key={cand.id}
+                  type="button"
+                  onClick={() => {
+                    selectAndFocusNode(cand, 0.95, {
+                      ...candidates,
+                      currentIndex: idx,
+                    });
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                    idx === candidates.currentIndex 
+                      ? 'bg-amber-400 text-stone-950 font-bold shadow-md scale-105' 
+                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                  }`}
+                >
+                  {cand.data.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-stone-400 hidden sm:inline pl-2 border-l border-stone-700 whitespace-nowrap">
+              Pfeiltaste erneut drücken zum Weiterschalten
+            </span>
+          </div>
+        )}
         
         {/* Detail-Panel auf der rechten Seite */}
         <InfoPanel 
           nodeData={selectedNodeData} 
           onClose={() => {
             const lastId = selectedNodeData?.technicalId || selectedNodeData?.pluginId;
-            setSelectedNodeData(null);
-            setEdges((eds) => 
-              eds.map((edge) => ({ ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false }))
-            );
+            clearSelection();
             if (lastId && reactFlowInstanceRef.current) {
               const node = nodes.find((n) => n.data.technicalId === lastId || n.id === lastId);
               if (node) {
-                // Bei geschlossenem Slider zentriert ohne Offset (isPanelOpen = false)
                 centerOnNode(node.id, 0.95, false, 350);
               }
             }
