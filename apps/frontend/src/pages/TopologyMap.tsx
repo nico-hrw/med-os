@@ -51,7 +51,7 @@ type FilterCategory = 'all' | 'clinical' | 'active' | 'infra';
 const API_BASE = '/yeti/api';
 
 export const TopologyMap: React.FC = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNodeData, setSelectedNodeData] = useState<CustomNodeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,8 +68,25 @@ export const TopologyMap: React.FC = () => {
   const [availablePluginsList, setAvailablePluginsList] = useState<AvailablePlugin[]>([]);
 
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const initialCenteredRef = useRef<boolean>(false);
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
+
+  // Zentriert die Ansicht komfortabel und herangezoomt auf einen Knoten (wie in Screenshot 2 gewünscht)
+  const centerOnNode = useCallback((nodeId: string, customZoom = 0.95, duration = 350) => {
+    if (!reactFlowInstanceRef.current) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const isComp = node.data?.status === 'component';
+    const width = isComp ? 260 : 280;
+    const height = isComp ? 125 : 145;
+
+    const cx = node.position.x + width / 2;
+    const cy = node.position.y + height / 2;
+
+    reactFlowInstanceRef.current.setCenter(cx, cy, { zoom: customZoom, duration });
+  }, [nodes]);
 
   // Handler zum Umschalten des Aufklapp-Status eines Plugins
   const togglePluginExpand = useCallback((pluginId: string) => {
@@ -95,7 +112,7 @@ export const TopologyMap: React.FC = () => {
     setExpandedPluginIds(new Set());
   }, []);
 
-  // Dynamischer Graph-Builder
+  // Dynamischer Graph-Builder mit schmaler, vertikaler Mehrspalten-Architektur
   const buildGraph = useCallback((
     active: ActivePlugin[], 
     available: AvailablePlugin[], 
@@ -132,10 +149,10 @@ export const TopologyMap: React.FC = () => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 2. KERN-INFRASTRUKTUR (Datenbank, Nginx Gateway, Terminals)
+    // 2. KERN-INFRASTRUKTUR (Linke Spalte, vertikal nach unten)
     // ─────────────────────────────────────────────────────────────
     if (filter === 'all' || filter === 'infra' || filter === 'active') {
-      // a) Zentrale Datenbank (Löst die 'database-core' Dependency real & fehlerfrei auf!)
+      // a) Zentrale Datenbank (Löst 'database-core' Dependency real & fehlerfrei auf)
       rawNodes.push({
         id: 'database-core',
         type: 'custom',
@@ -155,6 +172,7 @@ export const TopologyMap: React.FC = () => {
         id: 'edge-kernel-db',
         source: 'kernel-core',
         target: 'database-core',
+        type: 'smoothstep',
         animated: true,
         style: { stroke: '#06b6d4', strokeWidth: 2 },
       });
@@ -179,8 +197,18 @@ export const TopologyMap: React.FC = () => {
         id: 'edge-kernel-nginx',
         source: 'kernel-core',
         target: 'nginx-gateway',
+        type: 'smoothstep',
         animated: true,
         style: { stroke: '#3b82f6', strokeWidth: 1.8 },
+      });
+
+      rawEdges.push({
+        id: 'edge-db-nginx',
+        source: 'database-core',
+        target: 'nginx-gateway',
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: '#64748b', strokeWidth: 1.5, strokeDasharray: '3 3' },
       });
 
       // c) Klinische Terminals & Web-App
@@ -203,21 +231,13 @@ export const TopologyMap: React.FC = () => {
         id: 'edge-nginx-frontend',
         source: 'nginx-gateway',
         target: 'frontend-spa',
-        animated: false,
-        style: { stroke: '#8b5cf6', strokeWidth: 1.8 },
-      });
-
-      rawEdges.push({
-        id: 'edge-frontend-kernel',
-        source: 'frontend-spa',
-        target: 'kernel-core',
+        type: 'smoothstep',
         animated: true,
-        style: { stroke: '#10b981', strokeWidth: 1.5, strokeDasharray: '3 3' },
+        style: { stroke: '#8b5cf6', strokeWidth: 1.8 },
       });
     }
 
     const activeNames = new Set(active.map((p) => p.name));
-    const availableMap = new Map(available.map((p) => [p.name, p]));
 
     // ─────────────────────────────────────────────────────────────
     // 3. AKTIVE PLUGINS & DEREN AUFGEKLAPPTE KOMPONENTEN
@@ -234,7 +254,7 @@ export const TopologyMap: React.FC = () => {
           position: { x: 0, y: 0 },
           data: {
             label: plugin.name,
-            icon: plugin.icon || arch.icon || '🧩',
+            icon: plugin.icon || arch.icon || '🏥',
             status: 'active',
             description: plugin.description || arch.tagline,
             technicalId: plugin.name,
@@ -255,20 +275,24 @@ export const TopologyMap: React.FC = () => {
           id: `edge-core-${plugin.name}`,
           source: 'kernel-core',
           target: pluginNodeId,
+          type: 'smoothstep',
           animated: true,
           style: { stroke: '#10b981', strokeWidth: 2.2 },
         });
 
-        // Abhängigkeit zur Zentralen Datenbank (Prisma Layer) auflösen
-        rawEdges.push({
-          id: `edge-${plugin.name}-db`,
-          source: pluginNodeId,
-          target: 'database-core',
-          animated: false,
-          style: { stroke: '#059669', strokeWidth: 1.5 },
-        });
+        // Horizontale Verknüpfung zur Zentralen Datenbank (Prisma Layer)
+        if (rawNodes.some((n) => n.id === 'database-core')) {
+          rawEdges.push({
+            id: `edge-${plugin.name}-db`,
+            source: pluginNodeId,
+            target: 'database-core',
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: '#059669', strokeWidth: 1.5, strokeDasharray: '4 4' },
+          });
+        }
 
-        // AUFGEKLAPPTER AUFBAU: 4 spezialisierte Komponenten-Knoten einblenden
+        // AUFGEKLAPPTER AUFBAU: 4 spezialisierte Komponenten-Knoten schmal nach unten gestapelt
         if (isExpanded) {
           const compConfigs: { cat: ComponentCategory; id: string; label: string; badge: string; desc: string; summary: string; stroke: string }[] = [
             {
@@ -277,7 +301,7 @@ export const TopologyMap: React.FC = () => {
               label: `${plugin.name} Screens`,
               badge: 'UI-Schicht',
               desc: arch.ui.summary,
-              summary: `${arch.ui.components.length} Screen${arch.ui.components.length > 1 ? 's' : ''}`,
+              summary: `${arch.ui.components.length} View${arch.ui.components.length > 1 ? 's' : ''}`,
               stroke: '#6366f1',
             },
             {
@@ -304,7 +328,7 @@ export const TopologyMap: React.FC = () => {
               label: `${plugin.name} Events`,
               badge: 'Lifecycle',
               desc: arch.lifecycle.summary,
-              summary: `${arch.lifecycle.eventsProduced.length} SSE-Events`,
+              summary: `${arch.lifecycle.eventsProduced.length} Events`,
               stroke: '#059669',
             },
           ];
@@ -326,13 +350,14 @@ export const TopologyMap: React.FC = () => {
               },
             });
 
-            // Farbige Kante vom Parent-Plugin zur Sub-Komponente
+            // Farbiger Ast vom Parent-Plugin zur Sub-Komponente
             rawEdges.push({
               id: `edge-comp-${plugin.name}-${comp.cat}`,
               source: pluginNodeId,
               target: comp.id,
+              type: 'smoothstep',
               animated: true,
-              style: { stroke: comp.stroke, strokeWidth: 1.8, strokeDasharray: '4 2' },
+              style: { stroke: comp.stroke, strokeWidth: 2 },
             });
           });
         }
@@ -340,11 +365,10 @@ export const TopologyMap: React.FC = () => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. VERFÜGBARE STORE-PLUGINS (Uninstalled oder im Katalog)
+    // 4. VERFÜGBARE STORE-PLUGINS (Rechte Spalte, unter den aktiven)
     // ─────────────────────────────────────────────────────────────
     if (filter === 'all' || filter === 'clinical') {
       available.forEach((storePlugin) => {
-        // Nur anzeigen, falls nicht ohnehin bereits als aktives Plugin geladen
         if (activeNames.has(storePlugin.name)) return;
 
         const storeNodeId = `store-${storePlugin.name}`;
@@ -377,11 +401,11 @@ export const TopologyMap: React.FC = () => {
           id: `edge-core-store-${storePlugin.name}`,
           source: 'kernel-core',
           target: storeNodeId,
+          type: 'smoothstep',
           animated: false,
           style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '4 4' },
         });
 
-        // AUFGEKLAPPTER AUFBAU FÜR STORE-MODULE
         if (isExpanded) {
           const compConfigs: { cat: ComponentCategory; id: string; label: string; badge: string; desc: string; summary: string; stroke: string }[] = [
             {
@@ -443,8 +467,9 @@ export const TopologyMap: React.FC = () => {
               id: `edge-comp-store-${storePlugin.name}-${comp.cat}`,
               source: storeNodeId,
               target: comp.id,
+              type: 'smoothstep',
               animated: true,
-              style: { stroke: comp.stroke, strokeWidth: 1.8, strokeDasharray: '4 2' },
+              style: { stroke: comp.stroke, strokeWidth: 2 },
             });
           });
         }
@@ -459,7 +484,7 @@ export const TopologyMap: React.FC = () => {
     const validNodeIds = new Set(filteredNodes.map((n) => n.id));
     const filteredEdges = rawEdges.filter((e) => validNodeIds.has(e.source) && validNodeIds.has(e.target));
 
-    // Automatisches hierarchisches Layouting mit Dagre
+    // Deterministisches, schmales vertikales Layout (garantiert max. ~680px Breite)
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(filteredNodes, filteredEdges, 'TB');
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
@@ -494,15 +519,159 @@ export const TopologyMap: React.FC = () => {
     fetchTopologyData();
   }, [fetchTopologyData]);
 
-  // Zentrieren des Graphen bei Panel-Öffnung oder Layout-Wechseln
+  // Initiales Fokussieren: Startet direkt herangezoomt auf ein Kern-Modul (Screenshot 2-Stil)
   useEffect(() => {
-    if (reactFlowInstanceRef.current) {
-      const timer = setTimeout(() => {
-        reactFlowInstanceRef.current?.fitView({ duration: 400, padding: 0.2 });
-      }, 60);
-      return () => clearTimeout(timer);
+    if (!initialCenteredRef.current && nodes.length > 0 && reactFlowInstanceRef.current) {
+      const target = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes.find((n) => n.id === 'kernel-core') || nodes[0];
+      if (target) {
+        initialCenteredRef.current = true;
+        setSelectedNodeData(target.data);
+        setTimeout(() => {
+          centerOnNode(target.id, 0.95, 500);
+        }, 100);
+      }
     }
-  }, [selectedNodeData, expandedPluginIds, activeFilter]);
+  }, [nodes, centerOnNode]);
+
+  // ─────────────────────────────────────────────────────────────
+  // PFEILTASTEN-NAVIGATION: Verknüpfungen direkt mit ↑ ↓ ← → folgen
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Nicht navigieren, wenn der Nutzer im Suchfeld tippt
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' '];
+      if (!keys.includes(e.key)) return;
+
+      if (nodes.length === 0) return;
+
+      // Ermittle den aktuellen Knoten
+      let current = selectedNodeData 
+        ? nodes.find((n) => n.data.technicalId === selectedNodeData.technicalId || n.id === selectedNodeData.technicalId || n.data.label === selectedNodeData.label)
+        : null;
+
+      if (!current) {
+        // Fallback: Wähle das erste aktive Plugin oder den Kernel
+        const fallback = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0];
+        if (fallback) {
+          e.preventDefault();
+          setSelectedNodeData(fallback.data);
+          centerOnNode(fallback.id, 0.95);
+        }
+        return;
+      }
+
+      // Enter / Leertaste: Plugin-Aufbau aufklappen / einklappen
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (current.data.isPlugin && (current.data.technicalId || current.data.pluginId)) {
+          e.preventDefault();
+          togglePluginExpand((current.data.technicalId || current.data.pluginId)!);
+        }
+        return;
+      }
+
+      let nextNode: Node<CustomNodeData> | null = null;
+
+      // Kanten des aktuellen Knotens
+      const outgoing = edges.filter((edge) => edge.source === current.id).map((edge) => edge.target);
+      const incoming = edges.filter((edge) => edge.target === current.id).map((edge) => edge.source);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        // 1. Priorität: Verknüpfte Kind-Knoten unterhalb des aktuellen Knotens
+        const connectedBelow = nodes.filter((n) => outgoing.includes(n.id) && n.position.y > current.position.y);
+        if (connectedBelow.length > 0) {
+          // Den am nächsten liegenden Knoten wählen
+          connectedBelow.sort((a, b) => a.position.y - b.position.y);
+          nextNode = connectedBelow[0];
+        } else {
+          // 2. Räumliche Priorität: Nächster Knoten darunter in derselben Spalte
+          const nodesBelow = nodes.filter((n) => n.id !== current.id && n.position.y > current.position.y + 20);
+          if (nodesBelow.length > 0) {
+            nodesBelow.sort((a, b) => {
+              const dyA = a.position.y - current.position.y;
+              const dyB = b.position.y - current.position.y;
+              const dxA = Math.abs(a.position.x - current.position.x);
+              const dxB = Math.abs(b.position.x - current.position.x);
+              return (dyA + dxA * 0.4) - (dyB + dxB * 0.4);
+            });
+            nextNode = nodesBelow[0];
+          }
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        // 1. Priorität: Verknüpfte Eltern-Knoten oberhalb des aktuellen Knotens
+        const connectedAbove = nodes.filter((n) => incoming.includes(n.id) && n.position.y < current.position.y);
+        if (connectedAbove.length > 0) {
+          connectedAbove.sort((a, b) => b.position.y - a.position.y);
+          nextNode = connectedAbove[0];
+        } else {
+          // 2. Räumliche Priorität: Nächster Knoten darüber
+          const nodesAbove = nodes.filter((n) => n.id !== current.id && n.position.y < current.position.y - 20);
+          if (nodesAbove.length > 0) {
+            nodesAbove.sort((a, b) => {
+              const dyA = current.position.y - a.position.y;
+              const dyB = current.position.y - b.position.y;
+              const dxA = Math.abs(a.position.x - current.position.x);
+              const dxB = Math.abs(b.position.x - current.position.x);
+              return (dyA + dxA * 0.4) - (dyB + dxB * 0.4);
+            });
+            nextNode = nodesAbove[0];
+          }
+        }
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        // Wechsel von Infrastruktur (links) zu Plugins (rechts) oder verknüpften Knoten rechts
+        const nodesRight = nodes.filter((n) => n.id !== current.id && n.position.x > current.position.x + 80);
+        if (nodesRight.length > 0) {
+          nodesRight.sort((a, b) => {
+            const dyA = Math.abs(a.position.y - current.position.y);
+            const dyB = Math.abs(b.position.y - current.position.y);
+            return dyA - dyB;
+          });
+          nextNode = nodesRight[0];
+        }
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        // Wechsel von Plugins (rechts) zu Infrastruktur (links)
+        const nodesLeft = nodes.filter((n) => n.id !== current.id && n.position.x < current.position.x - 80);
+        if (nodesLeft.length > 0) {
+          nodesLeft.sort((a, b) => {
+            const dyA = Math.abs(a.position.y - current.position.y);
+            const dyB = Math.abs(b.position.y - current.position.y);
+            return dyA - dyB;
+          });
+          nextNode = nodesLeft[0];
+        }
+      }
+
+      if (nextNode) {
+        setSelectedNodeData(nextNode.data);
+        centerOnNode(nextNode.id, 0.95);
+
+        // Kanten-Hervorhebung
+        setEdges((eds) =>
+          eds.map((edge) => {
+            if (
+              (edge.source === current!.id && edge.target === nextNode!.id) ||
+              (edge.target === current!.id && edge.source === nextNode!.id)
+            ) {
+              return { ...edge, style: { stroke: '#f59e0b', strokeWidth: 3 }, animated: true };
+            }
+            if (edge.source === nextNode!.id || edge.target === nextNode!.id) {
+              return { ...edge, style: { stroke: '#fbbf24', strokeWidth: 2.2 }, animated: true };
+            }
+            return { ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false };
+          })
+        );
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, edges, selectedNodeData, centerOnNode, togglePluginExpand, setEdges]);
 
   // Live-Synchronisation über zentralen SSE-Stream
   useKernelEvents(useCallback((data: any) => {
@@ -520,6 +689,7 @@ export const TopologyMap: React.FC = () => {
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedNodeData(node.data as CustomNodeData);
+    centerOnNode(node.id, 0.95);
     
     // Highlight verbundener Kanten
     setEdges((eds) => 
@@ -530,7 +700,7 @@ export const TopologyMap: React.FC = () => {
         return { ...edge, style: { stroke: '#d6d3d1', strokeWidth: 1 }, animated: false };
       })
     );
-  }, [setEdges]);
+  }, [centerOnNode, setEdges]);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeData(null);
@@ -553,7 +723,7 @@ export const TopologyMap: React.FC = () => {
               </span>
             </div>
             <p className="text-stone-500 text-xs mt-1">
-              Vollständige Visualisierung von Microkernel, Infrastruktur, Plugins und deren internem Architektur-Aufbau
+              Schlanke vertikale Visualisierung: Verwenden Sie die <strong>Pfeiltasten (↑ ↓ ← →)</strong>, um den Verknüpfungen fließend zu folgen
             </p>
           </div>
 
@@ -577,7 +747,13 @@ export const TopologyMap: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => reactFlowInstanceRef.current?.fitView({ duration: 500, padding: 0.2 })}
+              onClick={() => {
+                const target = nodes.find((n) => n.id === 'plugin-patient-onboarding') || nodes[0];
+                if (target) {
+                  setSelectedNodeData(target.data);
+                  centerOnNode(target.id, 0.95);
+                }
+              }}
               className="px-3 py-1.5 rounded-xl text-xs font-medium bg-stone-900 hover:bg-stone-800 text-stone-50 transition-all active:scale-95 flex items-center gap-1.5"
             >
               <span>⛶</span>
@@ -586,7 +762,7 @@ export const TopologyMap: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter-Kacheln & Live-Suche */}
+        {/* Filter-Kacheln, Live-Suche & Tastatur-Hinweis */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-1.5">
             <button
@@ -622,23 +798,30 @@ export const TopologyMap: React.FC = () => {
             </button>
           </div>
 
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Komponente suchen..."
-              className="w-48 sm:w-60 px-3 py-1 text-xs bg-white rounded-lg border border-stone-200 focus:outline-none focus:border-stone-400 font-sans"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1 text-xs text-stone-400 hover:text-stone-600"
-              >
-                ✕
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200/80 text-[11px] text-stone-500 font-mono">
+              <span>⌨️</span>
+              <span>Pfeiltasten ↑ ↓ ← →</span>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Komponente suchen..."
+                className="w-44 sm:w-56 px-3 py-1 text-xs bg-white rounded-lg border border-stone-200 focus:outline-none focus:border-stone-400 font-sans"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1 text-xs text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -706,7 +889,9 @@ export const TopologyMap: React.FC = () => {
             onInit={(instance) => {
               reactFlowInstanceRef.current = instance;
             }}
-            fitView
+            defaultViewport={{ x: 50, y: 30, zoom: 0.95 }}
+            minZoom={0.3}
+            maxZoom={1.5}
             className="bg-transparent"
           >
             <Background color="#e7e5e4" gap={24} size={1} />
