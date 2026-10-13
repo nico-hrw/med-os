@@ -22,13 +22,18 @@ interface SimulationResult {
   timelineSample?: Array<{ minute: number; event: string; patientId: string }>;
 }
 
+interface HourlyArrivalRate {
+  hour: number;
+  expectedArrivals: number;
+  peakFactor: number;
+}
+
 interface DemandProfile {
   date: string;
-  seasonalFactor: number;
-  weekdayFactor: number;
   totalExpectedPatients: number;
   noShowProbability: number;
-  hourlyCurve: number[];
+  hourlyArrivalRates?: HourlyArrivalRate[];
+  generatedPatients?: any[];
 }
 
 export const EngineSimulation: React.FC = () => {
@@ -301,21 +306,22 @@ export const EngineSimulation: React.FC = () => {
                 Stochastischer Patientenzulauf &amp; Morning-Rush
               </h2>
               <p className="text-xs text-stone-500 mt-0.5">
-                Modellierung nach Wochentag ({demandProfile.weekdayFactor}x) und Saisonfaktor ({demandProfile.seasonalFactor}x)
+                Stochastische Ankunftsraten pro Stunde mit Poisson-Verteilung und Triage-Gewichtung
               </p>
             </div>
             <div className="text-right font-mono text-xs text-stone-600">
-              <div>Erwartetes Volumen: <span className="font-bold">{demandProfile.totalExpectedPatients}</span></div>
-              <div className="text-stone-400 text-[11px]">No-Show Rate: {(demandProfile.noShowProbability * 100).toFixed(0)}%</div>
+              <div>Erwartetes Volumen: <span className="font-bold">{demandProfile.totalExpectedPatients || 0}</span></div>
+              <div className="text-stone-400 text-[11px]">No-Show Rate: {((demandProfile.noShowProbability || 0) * 100).toFixed(0)}%</div>
             </div>
           </div>
 
           {/* Stündliche Verlaufskurve */}
           <div className="pt-4">
             <div className="h-28 flex items-end gap-2 border-b border-stone-200 pb-2">
-              {demandProfile.hourlyCurve.map((weight, i) => {
-                const hour = 8 + i;
+              {(demandProfile.hourlyArrivalRates || []).map((rate, i) => {
+                const hour = rate.hour;
                 const isPeak = hour >= 8 && hour <= 10;
+                const weight = rate.peakFactor || 1.0;
                 const heightPercent = Math.min(100, Math.round((weight / 2.0) * 100));
 
                 return (
@@ -326,7 +332,7 @@ export const EngineSimulation: React.FC = () => {
                       className={`w-full rounded-lg transition-all ${
                         isPeak ? 'bg-indigo-600' : 'bg-stone-300'
                       }`}
-                      title={`${hour}:00 Uhr: ${weight}x Basisfaktor`}
+                      title={`${hour}:00 Uhr: ca. ${rate.expectedArrivals} Patienten (${weight}x Last)`}
                     />
                     <span className="text-[10px] font-mono text-stone-400">{hour}:00</span>
                   </div>

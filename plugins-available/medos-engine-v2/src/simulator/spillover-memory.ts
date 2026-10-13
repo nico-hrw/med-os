@@ -12,9 +12,10 @@ export class SpilloverMemory {
     const unhandled = [...unservedPatients];
     this.currentBacklog = unhandled;
 
+    // Erhoehe die Dringlichkeit der uebertragenen Patienten fuer den Folgetag
     const carryOverPatients = unhandled.map((patient) => ({
       ...patient,
-      arrivalTimeMins: 0,
+      arrivalTimeMins: 0, // Erscheinen sofort zu Praxisbeginn am Folgetag
       urgencyLevel: Math.max(0, patient.urgencyLevel - 1),
     }));
 

@@ -26,6 +26,7 @@ export class DemandPredictor {
     const targetDate = new Date(dateStr);
     const factors = SeasonalCurveModel.getSeasonalFactors(targetDate);
 
+    // Errechnung des skalierten Gesamtvolumens
     const adjustedTotal = Math.round(
       this.baseDailyVolume * factors.monthFactor * factors.weekdayFactor
     );
@@ -33,6 +34,7 @@ export class DemandPredictor {
     const hourlyRates: HourlyArrivalRate[] = [];
     const patients: PatientDemand[] = [];
 
+    // Summe der Stundenkoeffizienten fuer Normalisierung (08:00 - 18:00 = 10 Stunden)
     let totalWeight = 0;
     for (let h = 8; h < 18; h++) {
       totalWeight += SeasonalCurveModel.getHourlyDistribution(h);
@@ -50,6 +52,7 @@ export class DemandPredictor {
         peakFactor: parseFloat((distWeight / (totalWeight / 10)).toFixed(2)),
       });
 
+      // Generiere einzelne stochastische Patienten fuer dieses Stundenfenster
       for (let i = 0; i < expectedInHour; i++) {
         const arrivalMinuteInHour = Math.floor(Math.random() * 59);
         const arrivalTimeMins = (h - 8) * 60 + arrivalMinuteInHour;
@@ -73,6 +76,7 @@ export class DemandPredictor {
       }
     }
 
+    // Sortiere chronologisch nach Ankunftsminute
     patients.sort((a, b) => a.arrivalTimeMins - b.arrivalTimeMins);
 
     return {
@@ -109,16 +113,16 @@ export class DemandPredictor {
   private calculateBaseDuration(triage: TriageCategory): number {
     switch (triage) {
       case 'notfall':
-        return Math.floor(25 + Math.random() * 20);
+        return Math.floor(25 + Math.random() * 20); // 25 - 45 Minuten
       case 'routine':
-        return Math.floor(10 + Math.random() * 12);
+        return Math.floor(10 + Math.random() * 12); // 10 - 22 Minuten
       case 'schnellspur':
-        return Math.floor(3 + Math.random() * 5);
+        return Math.floor(3 + Math.random() * 5);   // 3 - 8 Minuten
     }
   }
 
   private sampleNoShow(triage: TriageCategory, baseRate: number): boolean {
-    if (triage === 'notfall') return false;
+    if (triage === 'notfall') return false; // Notfaelle erscheinen immer
     const effectiveRate = triage === 'schnellspur' ? baseRate * 0.5 : baseRate;
     return Math.random() < effectiveRate;
   }

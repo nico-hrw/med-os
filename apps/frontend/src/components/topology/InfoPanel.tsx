@@ -78,6 +78,92 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({
     </div>
   );
 
+  // Neuro-symbolisches Planungsmodell für MedOS Engine v2
+  const renderEngineDetails = () => (
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
+      <section className="bg-stone-50/90 rounded-2xl p-4 border border-stone-200/80">
+        <h3 className="text-base font-serif font-bold text-stone-900 mb-2 border-b border-stone-200 pb-1.5 flex items-center justify-between">
+          <span>Neuro-Symbolischer 4-Ebenen Ablauf</span>
+          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+            Zero-Violation
+          </span>
+        </h3>
+        <p className="text-stone-600 font-sans text-xs leading-relaxed mb-3">
+          Das Plugin kombiniert deterministische mathematische Optimierung mit stochastischen Simulationen und Metaheuristiken für praxissichere Dienst- und Ressourcenpläne:
+        </p>
+
+        <div className="space-y-3 text-xs">
+          {/* Ebene 1 */}
+          <div className="bg-white p-3 rounded-xl border border-stone-200/70 shadow-xs">
+            <div className="flex items-center justify-between font-mono font-bold text-stone-900 mb-1">
+              <span className="text-indigo-700">[Ebene 1] MILP-Controller (Nativ)</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">Simplex / B&amp;B</span>
+            </div>
+            <p className="text-stone-600 leading-snug">
+              2-Phasen Dense Simplex &amp; Branch-and-Bound berechnen ein deterministisches Basisskelett im 15-Minuten-Raster.
+            </p>
+            <div className="my-2 p-2 bg-stone-50 rounded-lg border border-stone-200/60 overflow-x-auto text-[11px]">
+              <BlockMath math="\min \sum_{e,t} c_{start} y_{e,t} + \sum_{r,t} 10^5 \cdot s_{r,t}" />
+            </div>
+            <ul className="list-disc list-inside text-[11px] text-stone-500 space-y-0.5">
+              <li>ArbZG § 3/4: Mindestdauer 4h, Maximaldauer 10h, Ruhezeit &gt;= 11h</li>
+              <li>Big-M Notfall-Slack: Bei Personalmangel kontrollierte Unterdeckung statt Abbruch</li>
+              <li>Event-Loop Guard: Unterbricht alle 50 Knoten via setImmediate (500ms Timeout)</li>
+            </ul>
+          </div>
+
+          {/* Ebene 2 */}
+          <div className="bg-white p-3 rounded-xl border border-stone-200/70 shadow-xs">
+            <div className="flex items-center justify-between font-mono font-bold text-stone-900 mb-1">
+              <span className="text-sky-700">[Ebene 2] Praediktiver Agent</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">Stochastik</span>
+            </div>
+            <p className="text-stone-600 leading-snug">
+              Prognostiziert den Poisson-Patientenzulauf mit stündlichen Profilen und No-Show-Raten.
+            </p>
+            <div className="my-2 p-2 bg-stone-50 rounded-lg border border-stone-200/60 overflow-x-auto text-[11px]">
+              <BlockMath math="\lambda(t) = \lambda_{base} \cdot f_{Monat} \cdot f_{Tag} \cdot \omega(t)" />
+            </div>
+            <p className="text-[11px] text-stone-500 leading-snug">
+              Morning-Rush Peak (1.85x Last zwischen 08:00 und 10:30 Uhr) und Überhang-Kompensation.
+            </p>
+          </div>
+
+          {/* Ebene 3 */}
+          <div className="bg-white p-3 rounded-xl border border-stone-200/70 shadow-xs">
+            <div className="flex items-center justify-between font-mono font-bold text-stone-900 mb-1">
+              <span className="text-amber-700">[Ebene 3] Digitaler Zwilling</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">Event-Heap</span>
+            </div>
+            <p className="text-stone-600 leading-snug">
+              Diskrete Ereignissimulation (DES) mit binärem Min-Heap (O(log N)) in unter 5 Millisekunden.
+            </p>
+            <p className="text-[11px] text-stone-500 mt-1 leading-snug">
+              Injektion von Schocks (Notfallwellen 2.0x, Krankmeldungen, Geräteausfälle) und Multi-Day Spillover Memory für Überhänge am Praxisende.
+            </p>
+          </div>
+
+          {/* Ebene 4 */}
+          <div className="bg-white p-3 rounded-xl border border-stone-200/70 shadow-xs">
+            <div className="flex items-center justify-between font-mono font-bold text-stone-900 mb-1">
+              <span className="text-emerald-700">[Ebene 4] ALNS Metaheuristik</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">Metaheuristik</span>
+            </div>
+            <p className="text-stone-600 leading-snug">
+              Adaptive Large Neighborhood Search mit Destroy/Repair Operatoren und Simulated Annealing:
+            </p>
+            <div className="my-2 p-2 bg-stone-50 rounded-lg border border-stone-200/60 overflow-x-auto text-[11px]">
+              <BlockMath math="P(\text{accept}) = \exp\left(-\frac{\Delta \text{Penalty}}{T}\right)" />
+            </div>
+            <p className="text-[11px] text-stone-500 leading-snug">
+              Reduziert ergonomische Soft-Penalties (Split-Shifts, Pausenlage) um bis zu 60% ohne Verletzung der Hard-Constraints.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
   // Komponentenspezifische Detailansicht (wenn ein Sub-Knoten im Graph angeklickt wurde)
   const renderComponentView = () => {
     if (!arch) return null;
@@ -417,7 +503,8 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({
                   <p className="text-xs text-stone-600 leading-relaxed">{nodeData.concept || arch.tagline}</p>
                 </div>
 
-                {nodeData.label.includes('Scheduling') && renderSchedulingDetails()}
+                {(nodeData.label.includes('Scheduling') || nodeData.technicalId === 'predictive-scheduling') && renderSchedulingDetails()}
+                {(nodeData.label.toLowerCase().includes('engine') || nodeData.technicalId === 'medos-engine-v2' || nodeData.pluginId === 'medos-engine-v2') && renderEngineDetails()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div 

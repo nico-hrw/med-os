@@ -93,6 +93,7 @@ export class RepairOperators {
         const first = empShifts[0];
         const last = empShifts[empShifts.length - 1];
 
+        // Konsolidiere zu einer einzigen Schicht mit Pause dazwischen
         consolidated.push({
           ...first,
           endTime: last.endTime,
@@ -117,6 +118,7 @@ export class RepairOperators {
     const result = [...currentShifts];
 
     for (const toInsert of removedShifts) {
+      // Teste alternative Zeitfenster
       const candidateStarts = ['08:00', '08:30', '09:00', '07:30'];
       let bestShift = toInsert;
       let lowestPenalty = Infinity;

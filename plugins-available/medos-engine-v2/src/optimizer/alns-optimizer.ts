@@ -32,6 +32,7 @@ export class AlnsOptimizer {
     const coolingRate = options.coolingRate ?? 0.95;
     let temperature = options.initialTemperature ?? 1000;
 
+    // Initiale Bewertung
     const initialEval = this.evaluator.evaluateSchedule(initialShifts, constraints);
     let bestShifts = [...initialShifts];
     let bestPenalty = initialEval.totalPenalty;
@@ -45,11 +46,13 @@ export class AlnsOptimizer {
       consolidate_split: 0,
     };
 
+    // Hauptschleife der Adaptive Large Neighborhood Search
     for (let iter = 0; iter < maxIterations; iter++) {
       let candidateShifts: ShiftAssignment[];
       const opChoice = Math.random();
 
       if (opChoice < 0.35) {
+        // Operator 1: Worst-Penalty Schichten entfernen und bestmoeglich reparieren
         operatorUsage.worst_greedy++;
         const currentViolations = this.evaluator.evaluateSchedule(currentShifts, constraints).violations;
         const destroyed = DestroyOperators.destroyWorstPenalty(currentShifts, 2, currentViolations);
@@ -60,6 +63,7 @@ export class AlnsOptimizer {
           this.evaluator
         );
       } else if (opChoice < 0.60) {
+        // Operator 2: Zufallszerstoerung fuer breite Erkundung
         operatorUsage.random_greedy++;
         const destroyed = DestroyOperators.destroyRandomShifts(currentShifts, 2);
         candidateShifts = RepairOperators.repairGreedyBestFit(
@@ -69,22 +73,28 @@ export class AlnsOptimizer {
           this.evaluator
         );
       } else if (opChoice < 0.85) {
+        // Operator 3: Gestaffelte Rezeptionspausen reparieren
         operatorUsage.stagger_lunch++;
         const cleared = DestroyOperators.destroyLunchBreaks(currentShifts);
         candidateShifts = RepairOperators.repairStaggeredLunchBreaks(cleared);
       } else {
+        // Operator 4: Split-Shifts zusammenfuehren
         operatorUsage.consolidate_split++;
         candidateShifts = RepairOperators.repairConsolidateSplitShifts(currentShifts);
       }
 
+      // Kandidatenloesung bewerten
       const candidateEval = this.evaluator.evaluateSchedule(candidateShifts, constraints);
 
+      // Guard Rail: Niemals Hard Constraints brechen
       if (!candidateEval.isHardLegal) {
         continue;
       }
 
+      // Akzeptanzkriterium (Simulated Annealing)
       const delta = candidateEval.totalPenalty - currentPenalty;
       if (delta < 0) {
+        // Bessere Loesung immer akzeptieren
         currentShifts = candidateShifts;
         currentPenalty = candidateEval.totalPenalty;
 
@@ -93,6 +103,7 @@ export class AlnsOptimizer {
           bestPenalty = currentPenalty;
         }
       } else {
+        // Schlechtere Loesung probabilistisch akzeptieren (Entkommen aus lokalen Minima)
         const acceptanceProb = Math.exp(-delta / Math.max(1, temperature));
         if (Math.random() < acceptanceProb) {
           currentShifts = candidateShifts;

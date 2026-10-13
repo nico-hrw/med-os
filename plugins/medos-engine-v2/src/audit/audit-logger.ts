@@ -6,6 +6,7 @@ export type AuditEventType =
   | 'STRESS_TEST_EXECUTED'
   | 'ALNS_OPTIMIZATION_COMPLETED'
   | 'HARD_CONSTRAINT_VIOLATION_BLOCKED'
+  | 'EMERGENCY_SLACK_TRIGGERED'
   | 'CONFIG_UPDATED';
 
 export interface AuditRecord {
@@ -42,6 +43,7 @@ export class AuditLogger {
 
     this.inMemoryLogs.unshift(record);
 
+    // Auf 500 Eintraege im Memory begrenzen
     if (this.inMemoryLogs.length > 500) {
       this.inMemoryLogs.pop();
     }
@@ -51,7 +53,7 @@ export class AuditLogger {
         const todayKey = `audit:log:${new Date().toISOString().slice(0, 10)}`;
         await this.db.setJson(todayKey, this.inMemoryLogs.slice(0, 100));
       } catch {
-        // Fallback
+        // Fallback: Memory Log bleibt aktiv
       }
     }
 

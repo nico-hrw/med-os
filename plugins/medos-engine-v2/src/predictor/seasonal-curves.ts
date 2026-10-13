@@ -54,6 +54,7 @@ export class SeasonalCurveModel {
     const monthFactor = this.MONTH_FACTORS[month] ?? 1.0;
     const weekdayFactor = this.WEEKDAY_FACTORS[weekday] ?? 1.0;
 
+    // Basis No-Show-Rate variiert leicht nach Wochentag (Montags oft hoehere Absagen)
     const baseNoShowRate = weekday === 1 ? 0.14 : 0.10;
 
     return {

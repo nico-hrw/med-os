@@ -3,7 +3,7 @@ import * as path from 'path';
 import { IPlugin, PluginContext } from 'medos-core';
 import { AuditLogger } from './audit/audit-logger';
 import { ConstraintRegistry } from './constraints/constraint-registry';
-import { ExternalMilpClient } from './controller/solver-client';
+import { NativeMilpController } from './controller/native-milp-controller';
 import { AlnsOptimizer } from './optimizer/alns-optimizer';
 import { ShiftAssignment } from './optimizer/penalty-evaluator';
 import { DemandPredictor } from './predictor/demand-predictor';
@@ -47,7 +47,7 @@ function parseBody(req: any): Promise<any> {
 export default class MedOSEnginePlugin implements IPlugin {
   private context?: PluginContext;
   private constraintRegistry!: ConstraintRegistry;
-  private solverClient!: ExternalMilpClient;
+  private solverController!: NativeMilpController;
   private demandPredictor = new DemandPredictor();
   private simulator = new DigitalTwinSimulator();
   private alnsOptimizer = new AlnsOptimizer();
@@ -99,9 +99,14 @@ export default class MedOSEnginePlugin implements IPlugin {
       logger.error(`Fehler beim Laden der Standard-Constraints: ${error.message}`);
     }
 
+    const solverMode = (context.config && context.config.get('MILP_SOLVER_MODE')) || 'native';
     const solverUrl = (context.config && context.config.get('MILP_SOLVER_URL')) || 'http://localhost:8000';
-    this.solverClient = new ExternalMilpClient(solverUrl);
-    logger.info(`Externer MILP-Solver-Client initialisiert (${solverUrl})`);
+    this.solverController = new NativeMilpController({
+      solverMode: solverMode as 'native' | 'external',
+      externalSolverUrl: solverUrl,
+      maxSolveTimeMs: 500,
+    });
+    logger.info(`Nativer MILP-Solver initialisiert (Modus: ${solverMode}, Fallback-URL: ${solverUrl})`);
 
     const register = (
       method: string,
@@ -151,10 +156,10 @@ export default class MedOSEnginePlugin implements IPlugin {
           hardConstraints,
         };
 
-        logger.info(`Sende Planungsauftrag an externe KI fuer Zeitraum: ${startDate} bis ${endDate}`);
+        logger.info(`Starte MILP-Basisskelett-Berechnung (Modus: ${this.solverController.getSolverMode()}) fuer Zeitraum: ${startDate} bis ${endDate}`);
         context.broadcast?.('ENGINE_STAGE_CHANGED', { stage: 'SOLVING_HARD_CONSTRAINTS', startDate, endDate });
 
-        const solverResult = await this.solverClient.solveBaseline(requestPayload);
+        const solverResult = await this.solverController.solveBaseline(requestPayload);
 
         if (!solverResult.isFeasible) {
           logger.warn(`Solver meldet Konflikt: ${solverResult.error}`);
@@ -167,14 +172,22 @@ export default class MedOSEnginePlugin implements IPlugin {
           return;
         }
 
-        await this.auditLogger.logEvent('SOLVER_BASELINE_COMPUTED', 'Basisskelett erfolgreich berechnet', {
-          computationTimeMs: solverResult.computationTimeMs,
-          shiftCount: solverResult.shiftSkeleton.length,
-        });
+        if (solverResult.isEmergencySlack) {
+          logger.warn(`Solver meldet Unterdeckung (Notfall-Slack aktiv): ${solverResult.emergencyDeficits?.length || 0} Defizite identifiziert.`);
+          await this.auditLogger.logEvent('EMERGENCY_SLACK_TRIGGERED', 'Notfall-Relaxation im Schichtplan aktiviert', {
+            deficits: solverResult.emergencyDeficits,
+            computationTimeMs: solverResult.computationTimeMs,
+          });
+        } else {
+          await this.auditLogger.logEvent('SOLVER_BASELINE_COMPUTED', 'Basisskelett erfolgreich berechnet', {
+            computationTimeMs: solverResult.computationTimeMs,
+            shiftCount: solverResult.shiftSkeleton.length,
+          });
+        }
 
         sendResponse(res, 200, solverResult);
       } catch (error: any) {
-        logger.error(`Fehler bei der Kommunikation mit der KI: ${error.message}`);
+        logger.error(`Fehler bei der Berechnung des Basisskeletts: ${error.message}`);
         sendResponse(res, 500, { error: 'Interner Fehler bei der Solver-Berechnung' });
       }
     });

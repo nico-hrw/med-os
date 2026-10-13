@@ -28,16 +28,41 @@ export interface ConstraintDefinition {
   enabled: boolean;
 }
 
+export interface StaffMember {
+  id: string;
+  role: string;
+  skills?: string[];
+}
+
 export interface SolverRequest {
   startDate: string;
   endDate: string;
-  staffPool: Array<{ id: string; role: string; skills: string[] }>;
+  staffPool: StaffMember[];
   hardConstraints: ConstraintDefinition[];
+}
+
+export interface EmergencyDeficitInfo {
+  slotTime: string;
+  slotIndex: number;
+  roleOrSpecialty: string;
+  deficitCount: number;
+  reason: string;
 }
 
 export interface SolverResponse {
   isFeasible: boolean;
-  shiftSkeleton: Array<{ employeeId: string; startTime: string; endTime: string; room?: string }>;
+  shiftSkeleton: Array<{
+    employeeId: string;
+    role?: string;
+    startTime: string;
+    endTime: string;
+    room?: string;
+    breakStartTime?: string;
+    breakEndTime?: string;
+  }>;
   computationTimeMs: number;
   error?: string;
+  isEmergencySlack?: boolean;
+  emergencyDeficits?: EmergencyDeficitInfo[];
+  solverMode?: 'native' | 'external';
 }

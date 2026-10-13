@@ -2,7 +2,43 @@
 
 Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumentiert.
 
-## [Unreleased] - 2026-10-12
+## [Unreleased] - 2026-10-13
+
+### Hinzugefuegt
+- **Nativer In-Process TypeScript MILP-Solver fuer `medos-engine-v2` (`simplex-solver.ts`, `milp-model-builder.ts`, `native-milp-controller.ts`, `EnginePlanner.tsx`)**:
+  - **Vollstaendige Autarkie ohne externen Python-Dienst**:
+    - Ersatz der externen Python-Abhaengigkeit (`http://localhost:8000`) durch eine native, vollstaendig in TypeScript implementierte mathematische Optimierungs-Engine im gleichen Node.js-Prozess.
+  - **2-Phasen Simplex & Branch-and-Bound Solver (`src/controller/simplex-solver.ts`)**:
+    - Dichtes Matrix-Tableau mit Hilfsvariablen (Phase 1) zur Auffindung einer zulaessigen Basisloesung und Phase 2 zur Zielfunktionsminimierung.
+    - Bland-Regel zur deterministischen Vermeidung von Simplex-Zyklen (Cycling).
+    - Asynchroner Branch-and-Bound-Suchbaum fuer 0/1-Binaervariablen ($x_{e, t} \in \{0, 1\}$) mit Most-Fractional Verzweigung und Best-Bound Pruning.
+    - Node.js Event-Loop Guard: Unterbrechung (`setImmediate`) alle 50 Knoten und 500ms Ausfuehrungsgrenze verhindern Socket-Timeouts und Event-Loop Blockaden.
+  - **15-Minuten Diskretisierung & ArbZG-Modellierung (`src/controller/milp-model-builder.ts`)**:
+    - 48 Zeitslots pro Tag (07:00 bis 19:00 Uhr, 15-Minuten Raster) fuer mikrofeine Schichtmodellierung.
+    - ArbZG § 3 & § 4 Restriktionen: Mindestschichtdauer (4h = 16 Slots), Hoechstarbeitszeit (10h = 40 Slots), zusammenhaengende Schichten (maximal ein Schichtbeginn pro Tag) und garantierte Ruhezeiten (>= 11h).
+    - Rollenbasierte Mindestbesetzung (z. B. Arzt-Praesenz waehrend der Kernsprechzeiten 08:00 - 12:00 und 14:00 - 18:00 Uhr).
+  - **Big-M Notfall-Slack Relaxation ($10^5$) bei Personalmangel**:
+    - Slack-Variablen fuer jede erforderliche Rolle und jeden Slot. Bei akutem Personalmangel scheitert die Engine nicht mit einem leeren Plan, sondern aktiviert kontrolliert Notfall-Slack und dokumentiert die Defizite (`isEmergencySlack: true`, `emergencyDeficits`).
+  - **Hybrider Controller & Fallback-Architektur (`src/controller/native-milp-controller.ts`)**:
+    - Primaerer nativer Modus mit optionaler Konfiguration (`MILP_SOLVER_MODE='native' | 'external'`).
+  - **Visuelle Notfall-Slack Warnanzeige & Defizit-Spur (`EnginePlanner.tsx`)**:
+    - Prominentes Warnbanner mit Detailaufschluesselung fehlender Qualifikationen und Zeitraeume bei aktiver Unterdeckung.
+    - Dedizierte rote Defizit-Spur mit Ausrufezeichen in der Gantt-Zeitleiste auf den exakten 15-Minuten-Intervallen.
+    - Interaktiver Umschalter "Test-Unterdeckung" im Cockpit zur direkten Verifikation des Solver-Relaxationsverhaltens.
+    - Audit-Trail Registrierung des neuen Ereignistyps `EMERGENCY_SLACK_TRIGGERED`.
+- **Dienstplan-Export im Cockpit (`EnginePlanner.tsx`)**:
+  - Provisorischer 1-Klick CSV-Export mit UTF-8 Byte-Order-Mark (BOM) fuer Excel, Schichtzeiten, Pausenfenstern und Mitarbeiterrollen.
+- **Topologie-Layout & Architektur-Explorator (`layout.ts`, `InfoPanel.tsx`)**:
+  - **Ausbalanciertes Layouting (`layout.ts`)**: Beseitigung der starren Einspaltigkeit bei aufgeklappten Modulen durch ein kompaktes 2x2 Komponenten-Grid (UI, API, Data, Lifecycle) sowie leichtes Staggering aufeinanderfolgender Plugins. Verhindert horizontales Ausufern bei gleichzeitiger Beseitigung endloser vertikaler Tuerme.
+  - **Vertiefte mathematische Modell-Dokumentation (`InfoPanel.tsx`)**: Integration einer interaktiven 4-Ebenen Planungs-Uebersicht mit KaTeX-Formeln fuer MILP, Poisson-Bedarf, DES-Simulation und ALNS-Metaheuristik bei Auswahl von `medos-engine-v2`.
+- **Roadmap & Entwicklungs-Backlog (`docs/TODO.md`)**:
+  - Erfassung zukuenftiger Erweiterungen fuer das medizinische Regelwerk (TVoeD-K, Qualifikationsmatrizen, zirkadiane Ergonomie) und PVS-/Patienten-Onboarding-Kopplung.
+
+### Behoben
+- **Laufzeitabsturz im Stresstest & Resilienz-Simulator (`EngineSimulation.tsx`)**:
+  - Beseitigung des Fehlers `TypeError: Cannot read properties of undefined (reading 'map')`: Anpassung der Schnittstelle `DemandProfile` an die tatsaechliche Rueckgabe `hourlyArrivalRates` des Backends und Einfuehrung defensiver Fallbacks.
+
+## [2.1.0] - 2026-10-12
 
 ### Hinzugefuegt
 - **Frontend-Oberflächen, Navigation & Routing für `medos-engine-v2` (`App.tsx`, `Sidebar.tsx`, `EnginePlanner.tsx`, `EngineConstraints.tsx`, `EngineSimulation.tsx`)**:

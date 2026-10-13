@@ -3,8 +3,8 @@ import { ConstraintDefinition } from '../types/engine-types';
 export interface ShiftAssignment {
   employeeId: string;
   role: string;
-  startTime: string;
-  endTime: string;
+  startTime: string; // z.B. "08:00"
+  endTime: string;   // z.B. "16:30"
   room?: string;
   breakStartTime?: string;
   breakEndTime?: string;
@@ -55,6 +55,7 @@ export class PenaltyEvaluator {
     let hardViolationsCount = 0;
     const violations: PenaltyViolation[] = [];
 
+    // Gruppiere Schichten nach Mitarbeiter
     const shiftsByEmployee = new Map<string, ShiftAssignment[]>();
     for (const shift of shifts) {
       const list = shiftsByEmployee.get(shift.employeeId) || [];
@@ -62,8 +63,9 @@ export class PenaltyEvaluator {
       shiftsByEmployee.set(shift.employeeId, list);
     }
 
-    // 1. Hard Constraints Pruefung
+    // 1. Hard Constraints Pruefung (Zero-Violation Guard Rail)
     for (const [employeeId, empShifts] of shiftsByEmployee.entries()) {
+      // Sortiere Schichten nach Startzeit
       empShifts.sort((a, b) => PenaltyEvaluator.timeToMinutes(a.startTime) - PenaltyEvaluator.timeToMinutes(b.startTime));
 
       let dailyNetMinutes = 0;
@@ -73,7 +75,7 @@ export class PenaltyEvaluator {
         const end = PenaltyEvaluator.timeToMinutes(s.endTime);
         const grossDuration = end - start;
 
-        // LABOR-002: Mindestschichtdauer >= 240 Min (4 Stunden)
+        // LABOR-002: Mindestschichtdauer >= 240 Min (4 Stunden Brutto-Praesenz)
         if (grossDuration < 240) {
           isHardLegal = false;
           hardViolationsCount++;
@@ -123,7 +125,7 @@ export class PenaltyEvaluator {
       }
     }
 
-    // 2. Soft Constraints Pruefung
+    // 2. Soft Constraints Pruefung (Kostenfunktion fuer ALNS)
     for (const [employeeId, empShifts] of shiftsByEmployee.entries()) {
       // ERG-001: Vermeidung von Split-Shifts
       if (empShifts.length > 1) {
@@ -183,9 +185,10 @@ export class PenaltyEvaluator {
       }
     }
 
-    // ERG-003: Gestaffelte Pausenzeiten fuer Rezeption
+    // ERG-003: Gestaffelte Pausenzeiten fuer Rezeption (12:00 - 13:30)
+    // Pruefe, ob waehrend der Mittagspause mindestens 1 MFA anwesend ist
     const receptionMfaShifts = shifts.filter((s) => s.role === 'MFA');
-    const lunchMinutes = [720, 750, 780, 810];
+    const lunchMinutes = [720, 750, 780, 810]; // 12:00, 12:30, 13:00, 13:30
     for (const checkMin of lunchMinutes) {
       let activeMfaCount = 0;
       for (const s of receptionMfaShifts) {

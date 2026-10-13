@@ -13,6 +13,14 @@ interface Shift {
   activePatientMinutes?: number;
 }
 
+interface EmergencyDeficit {
+  slotTime: string;
+  slotIndex: number;
+  roleOrSpecialty: string;
+  deficitCount: number;
+  reason: string;
+}
+
 interface Violation {
   constraintId: string;
   constraintName: string;
@@ -50,6 +58,10 @@ export const EnginePlanner: React.FC = () => {
   const [executionTime, setExecutionTime] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
+  const [solverMode, setSolverMode] = useState<string>('native');
+  const [isEmergencySlack, setIsEmergencySlack] = useState<boolean>(false);
+  const [emergencyDeficits, setEmergencyDeficits] = useState<EmergencyDeficit[]>([]);
+  const [simulateUnderstaffing, setSimulateUnderstaffing] = useState<boolean>(false);
 
   // Live SSE-Updates fuer Engine-Phasen und Optimierungsergebnisse
   useKernelEvents(
@@ -89,18 +101,25 @@ export const EnginePlanner: React.FC = () => {
     setLoading(true);
     setCurrentStage('SOLVING_HARD_CONSTRAINTS');
     try {
+      const staffPool = simulateUnderstaffing
+        ? [
+            { id: 'MFA Anna', role: 'MFA' },
+            { id: 'MFA Bernd', role: 'MFA' },
+          ]
+        : [
+            { id: 'Dr. Mueller', role: 'Doctor' },
+            { id: 'Dr. Weber', role: 'Doctor' },
+            { id: 'MFA Anna', role: 'MFA' },
+            { id: 'MFA Bernd', role: 'MFA' },
+          ];
+
       const res = await fetch(`${API_BASE}/engine/solve-baseline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startDate: '2026-10-15',
           endDate: '2026-10-15',
-          staffPool: [
-            { id: 'Dr. Mueller', role: 'Doctor' },
-            { id: 'Dr. Weber', role: 'Doctor' },
-            { id: 'MFA Anna', role: 'MFA' },
-            { id: 'MFA Bernd', role: 'MFA' },
-          ],
+          staffPool,
         }),
       });
       const data = await res.json();
@@ -110,6 +129,9 @@ export const EnginePlanner: React.FC = () => {
         setViolations([]);
         setExecutionTime(data.computationTimeMs || 12);
         setCurrentStage('BASELINE_READY');
+        setSolverMode(data.solverMode || 'native');
+        setIsEmergencySlack(Boolean(data.isEmergencySlack));
+        setEmergencyDeficits(data.emergencyDeficits || []);
       }
       fetchAuditLogs();
     } catch (err) {
@@ -170,29 +192,79 @@ export const EnginePlanner: React.FC = () => {
     return { left: `${left}%`, width: `${width}%` };
   };
 
+  const calculateSlotBar = (slotTime: string) => {
+    const [h, m] = slotTime.split(':').map(Number);
+    const startMin = h * 60 + m;
+    const base = 7 * 60;
+    const total = 12 * 60;
+    const left = Math.max(0, (startMin - base) / total) * 100;
+    const width = (15 / total) * 100;
+    return { left: `${left}%`, width: `${width}%` };
+  };
+
+  const handleExportCsv = () => {
+    const headers = ['Mitarbeiter', 'Rolle', 'Schichtbeginn', 'Schichtende', 'Pausenbeginn', 'Pausenende'];
+    const rows = shifts.map((s) => [
+      `"${s.employeeId}"`,
+      `"${s.role}"`,
+      `"${s.startTime}"`,
+      `"${s.endTime}"`,
+      `"${s.breakStartTime || '-'}"`,
+      `"${s.breakEndTime || '-'}"`,
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((e) => e.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Dienstplan_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Kopfbereich */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/80 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-stone-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.03)]">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-stone-900 text-stone-50">
               MedOS Engine v2
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-              Zero-Violation Aktiv
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200">
+              MILP: {solverMode === 'native' ? 'Nativ In-Process' : 'Extern'}
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border ${
+                isEmergencySlack
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+              }`}
+            >
+              {isEmergencySlack ? 'Notfall-Slack Aktiv' : 'Zero-Violation Konform'}
             </span>
           </div>
           <h1 className="text-3xl font-serif text-stone-900 tracking-tight">
             Planungsmatrix & Dienstplan-Cockpit
           </h1>
           <p className="text-stone-500 text-sm mt-1 max-w-2xl">
-            Hybride neuro-symbolische Planungs-Engine. Deterministischer MILP-Controller sichert Arbeitszeitgesetz (ArbZG), ALNS-Metaheuristik optimiert Ergonomie und Pausenabdeckung.
+            Hybride neuro-symbolische Planungs-Engine. Deterministischer 2-Phasen Simplex MILP-Controller sichert Arbeitszeitgesetz (ArbZG), ALNS-Metaheuristik optimiert Ergonomie und Pausenabdeckung.
           </p>
         </div>
 
         {/* Aktionsknoepfe */}
         <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-xs font-mono text-stone-600 bg-stone-100 hover:bg-stone-200/80 px-3.5 py-2.5 rounded-2xl border border-stone-300/70 cursor-pointer select-none transition-all">
+            <input
+              type="checkbox"
+              checked={simulateUnderstaffing}
+              onChange={(e) => setSimulateUnderstaffing(e.target.checked)}
+              className="rounded text-stone-900 accent-stone-900 cursor-pointer"
+            />
+            <span>Test-Unterdeckung</span>
+          </label>
           <button
             type="button"
             onClick={handleSolveBaseline}
@@ -208,6 +280,14 @@ export const EnginePlanner: React.FC = () => {
             className="px-5 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-stone-50 text-xs font-semibold font-mono shadow-md shadow-stone-900/10 transition-all active:scale-95 disabled:opacity-50"
           >
             {loading ? 'Berechne...' : '[2] ALNS-Optimierung'}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="px-4 py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-stone-700 text-xs font-semibold font-mono border border-stone-200 transition-all shadow-xs"
+            title="Dienstplan als CSV-Tabelle exportieren"
+          >
+            Export (CSV)
           </button>
           <button
             type="button"
@@ -286,9 +366,44 @@ export const EnginePlanner: React.FC = () => {
         </div>
       </div>
 
+      {/* Notfall-Slack Warnbanner bei Unterdeckung */}
+      {isEmergencySlack && (
+        <div className="bg-red-50/90 border border-red-300 rounded-3xl p-6 shadow-sm space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+              <span className="text-sm font-mono font-bold uppercase tracking-wider text-red-950">
+                Notfall-Relaxation aktiv: Unterdeckung im Personalpool festgestellt
+              </span>
+            </div>
+            <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-red-200/90 text-red-950 border border-red-300">
+              {emergencyDeficits.length} unbesetzte 15-Min.-Slots
+            </span>
+          </div>
+          <p className="text-xs text-red-800 leading-relaxed">
+            Der deterministische MILP-Solver konnte den Schichtplan mit dem bereitgestellten Personalpool nicht ohne Verletzung der Mindestbesetzung (z. B. Arzt-Praesenz waehrend der Kernsprechzeiten) schliessen. Big-M Slack-Variablen wurden aktiviert, um einen ausfuehrbaren Notfall-Dienstplan zu generieren.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+            {emergencyDeficits.slice(0, 8).map((d, i) => (
+              <div key={i} className="bg-white/90 p-2.5 rounded-xl border border-red-200 text-xs font-mono shadow-xs">
+                <div className="flex justify-between items-center text-red-950 font-bold">
+                  <span>{d.slotTime} Uhr</span>
+                  <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-800 text-[10px]">
+                    {d.roleOrSpecialty}
+                  </span>
+                </div>
+                <div className="text-[11px] text-red-700 mt-1 leading-snug">
+                  {d.reason}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Visuelle Gantt-Planungsmatrix */}
       <div className="bg-white/80 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-stone-200/80 shadow-[0_8px_30px_rgba(0,0,0,0.03)] space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-serif text-stone-900">
               Personal- &amp; Schichtbelegung (Gantt)
@@ -297,7 +412,7 @@ export const EnginePlanner: React.FC = () => {
               Zeitleiste von 07:00 bis 19:00 Uhr mit Schichtbalken, Pausenzeiten und Rollen-Zuordnung
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs font-mono text-stone-500">
+          <div className="flex items-center gap-4 text-xs font-mono text-stone-500 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md bg-stone-900" />
               <span>Arzt</span>
@@ -310,6 +425,12 @@ export const EnginePlanner: React.FC = () => {
               <span className="w-3 h-3 rounded-md bg-amber-400" />
               <span>Ruhepause</span>
             </div>
+            {isEmergencySlack && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-md bg-red-500" />
+                <span className="text-red-700 font-semibold">Unterdeckung</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -389,6 +510,37 @@ export const EnginePlanner: React.FC = () => {
               </div>
             );
           })}
+
+          {/* Notfall-Unterdeckung Slot-Spur */}
+          {isEmergencySlack && emergencyDeficits.length > 0 && (
+            <div className="flex items-center gap-4 py-2.5 border-t-2 border-red-200 bg-red-50/60 rounded-2xl px-3 mt-3">
+              <div className="w-44 flex-shrink-0">
+                <div className="text-sm font-semibold text-red-950 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                  <span>Defizit-Spur</span>
+                </div>
+                <div className="text-[10px] font-mono text-red-700 mt-0.5">
+                  Unterdeckung ({emergencyDeficits.length} Slots)
+                </div>
+              </div>
+
+              <div className="flex-1 relative h-9 bg-red-100/60 rounded-xl overflow-hidden border border-red-200">
+                {emergencyDeficits.map((d, i) => {
+                  const slotBar = calculateSlotBar(d.slotTime);
+                  return (
+                    <div
+                      key={i}
+                      style={{ left: slotBar.left, width: slotBar.width }}
+                      className="absolute top-1 bottom-1 bg-red-500/85 hover:bg-red-600 rounded flex items-center justify-center text-[9px] font-mono text-white font-bold transition-colors cursor-help"
+                      title={`Unterdeckung: ${d.roleOrSpecialty} um ${d.slotTime} Uhr (${d.reason})`}
+                    >
+                      !
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

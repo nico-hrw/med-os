@@ -86,7 +86,10 @@ plugins-available/medos-engine-v2/
     │   ├── simulation-types.ts    # Events, Heaps, Stresstest-Szenarien, Spillover-States
     │   └── medos-core.d.ts        # Ambient-Typdeklaration fuer den Kernel-Context
     ├── controller/
-    │   └── solver-client.ts       # Ebene 1: ExternalMilpClient zur Kommunikation mit MILP-Solver
+    │   ├── simplex-solver.ts      # Ebene 1: 2-Phasen Simplex & Branch-and-Bound (0/1 MILP, Event-Loop Yielding)
+    │   ├── milp-model-builder.ts  # 15-Minuten Diskretisierung (48 Slots), ArbZG-Modell & Big-M Slack
+    │   ├── native-milp-controller.ts # Hybrider Controller (nativ/extern Fallback)
+    │   └── solver-client.ts       # Optionaler Client fuer externen Python-Solver
     ├── predictor/
     │   ├── demand-predictor.ts    # Ebene 2: Patientenzulauf-, Rush- & No-Show-Prognose
     │   └── seasonal-curves.ts     # Tageszeit- & Wochentagsprofile, Infektionswellen
@@ -120,8 +123,8 @@ flowchart TD
         Pred["Demand Predictor: Morning Rush, No-Show-Raten, Saisonale Wellen"]
     end
 
-    subgraph Layer1 ["Ebene 1: Der Controller (MILP-Solver)"]
-        MILP["MILP Solver: Deterministisches Schicht-Skelett\n100% Garantie fuer ArbZG & Facharztpraesenz\n(FAIL-SAFE FUNDAMENT)"]
+    subgraph Layer1 ["Ebene 1: Der Controller (Nativer MILP-Solver)"]
+        MILP["Nativer 2-Phasen Simplex & Branch-and-Bound\n15-Minuten-Slots (48 Slots/Tag), Big-M Notfall-Slack\n100% Garantie fuer ArbZG & Facharztpraesenz\n(FAIL-SAFE FUNDAMENT)"]
     end
 
     subgraph Layer3 ["Ebene 3: Stresstest-Simulator (Digitaler Zwilling)"]
@@ -152,10 +155,14 @@ flowchart TD
     Sim --> Audit
 ```
 
-### Ebene 1: Der Controller (MILP-Solver – Deterministisches Sicherheitsfundament)
-- **Aufgabe:** Berechnung des rechtlich unanfechtbaren Basis-Schichtplans.
-- **Prinzip:** Formale mathematische Optimierung (Mixed-Integer Linear Programming).
-- **Zustaendigkeit:** Ausschliessliche Pruefung und Durchsetzung von Hard Constraints (`Hard_Must`, `Hard_Must_Not`).
+### Ebene 1: Der Controller (Nativer In-Process MILP-Solver – Deterministisches Sicherheitsfundament)
+- **Aufgabe:** Berechnung des rechtlich unanfechtbaren Basis-Schichtplans ohne externe Netzwerk- oder Microservice-Abhaengigkeiten.
+- **Prinzip:** Mathematische Optimierung (Mixed-Integer Linear Programming) direkt in TypeScript:
+  - **2-Phasen Dense Simplex:** Phase 1 zur Bestimmung einer zulaessigen Basislosung, Phase 2 zur Zielfunktionsminimierung unter Anwendung der Bland-Regel gegen Entartung/Zyklen.
+  - **Branch-and-Bound (0/1 MILP):** Asynchrone Tiefensuche ueber binaere Schichtentscheidungen $x_{e, t} \in \{0, 1\}$.
+  - **Event-Loop Guard:** Automatisches Yielding via `setImmediate` alle 50 B&B-Knoten mit 500ms Timeout-Schutz verhindert ein Blockieren des Node.js Event-Loops.
+- **15-Minuten Zeitschritte:** 48 Zeitschlitze von 07:00 bis 19:00 Uhr bilden Arbeitszeitgesetz (ArbZG § 3/4: Mindestdauer 4h, Maximaldauer 10h, zusammenhaengende Schicht) mathematisch exakt ab.
+- **Big-M Notfall-Slack Relaxation ($10^5$):** Bei akutem Personalmangel scheitert die Berechnung nicht, sondern relaxiert Mindestanforderungen ueber bestrafte Slack-Variablen. Unterdeckte Slots werden explizit als Notfall-Abweichungen (`isEmergencySlack: true`, `emergencyDeficits`) ausgewiesen und im Audit-Log vermerkt.
 - **Fail-Safe Mechanismus:** Sollten KI-Vorhersagen oder ALNS-Optimierer fehlschlagen, abbrechen oder in Timeouts laufen, wird der Plan des Controllers sofort als verbindlicher Dienstplan ausgeliefert. Es kann niemals ein illegaler Dienstplan generiert werden.
 
 ### Ebene 2: Der Praediktive KI-Agent (Demand Forecasting)

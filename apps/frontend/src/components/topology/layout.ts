@@ -52,21 +52,21 @@ export const getLayoutedElements = (
   // Spalte 3: Store-Erweiterungen (rechts)
   // Kern oben zentriert. Verhindert die endlose 1-Spalten-Liste komplett!
   let col1X = 40;
-  let col2X = 365;
-  let col3X = 690;
-  let coreX = 365;
+  let col2X = 390;
+  let col3X = 860;
+  let coreX = 430;
 
   if (!hasInfra && hasActive && !hasStore) {
-    col2X = 200;
-    coreX = 200;
+    col2X = 220;
+    coreX = 220;
   } else if (!hasInfra && hasActive && hasStore) {
-    col2X = 120;
-    col3X = 450;
-    coreX = 285;
+    col2X = 140;
+    col3X = 580;
+    coreX = 360;
   } else if (hasInfra && hasActive && !hasStore) {
     col1X = 40;
-    col2X = 365;
-    coreX = 200;
+    col2X = 390;
+    coreX = 240;
   } else if (hasInfra && !hasActive && !hasStore) {
     col1X = 200;
     coreX = 200;
@@ -93,13 +93,19 @@ export const getLayoutedElements = (
   const categoryOrder: ComponentCategory[] = ['ui', 'api', 'data', 'lifecycle'];
 
   // Helper zum Platzieren einer Plugin-Spalte samt Kind-Komponenten
+  // Staggered & 2x2 Komponenten-Grid: weder zu breit noch starr einspaltig untereinander!
   const layoutPluginColumn = (columnNodes: Node<CustomNodeData>[], startColX: number) => {
     let curY = startY;
 
-    columnNodes.forEach((pNode) => {
+    columnNodes.forEach((pNode, index) => {
       const pluginId = pNode.data.technicalId || pNode.data.pluginId || pNode.id.replace(/^(plugin-|store-)/, '');
 
-      pNode.position = { x: startColX, y: curY };
+      // Leichter horizontaler Versatz zwischen aufeinanderfolgenden Plugins (staggered)
+      // Verhindert eine starre 1-Spalten-Wand, ohne zu breit zu fächern
+      const staggerOffsetX = index % 2 === 0 ? 0 : 40;
+      const nodeX = startColX + staggerOffsetX;
+
+      pNode.position = { x: nodeX, y: curY };
       pNode.targetPosition = Position.Top;
       pNode.sourcePosition = Position.Bottom;
       curY += 185;
@@ -116,14 +122,23 @@ export const getLayoutedElements = (
           return catA - catB;
         });
 
-        comps.forEach((cNode) => {
-          cNode.position = { x: startColX + 15, y: curY };
-          cNode.targetPosition = Position.Left;
+        // Kompaktes 2x2 Grid statt 1x4 Endlosturm:
+        // Spalte A (links): UI (Index 0), Data (Index 2)
+        // Spalte B (rechts): API (Index 1), Lifecycle (Index 3)
+        comps.forEach((cNode, compIdx) => {
+          const isLeft = compIdx % 2 === 0;
+          const row = Math.floor(compIdx / 2);
+
+          const compX = isLeft ? nodeX - 45 : nodeX + 135;
+          const compY = curY + (row * 145);
+
+          cNode.position = { x: compX, y: compY };
+          cNode.targetPosition = Position.Top;
           cNode.sourcePosition = Position.Bottom;
-          curY += 150; // 125px Höhe + 25px Abstand
         });
 
-        curY += 15; // Visueller Puffer
+        const rowCount = Math.ceil(comps.length / 2);
+        curY += (rowCount * 145) + 30; // Visueller Puffer
       }
     });
 
