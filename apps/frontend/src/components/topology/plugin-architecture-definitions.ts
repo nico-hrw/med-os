@@ -244,6 +244,130 @@ export const PLUGIN_ARCHITECTURES: Record<string, PluginArchitecture> = {
     },
   },
 
+  'medos-engine-v2': {
+    pluginId: 'medos-engine-v2',
+    title: 'Neuro-Symbolic Planning & Simulation Engine',
+    icon: 'M',
+    tagline: 'Hybride Planungs- & Vorhersage-Engine: MILP Hard-Constraints, Event-Heap Stresstests, Spillover-Memory und ALNS-Feinoptimierung.',
+    ui: {
+      title: 'Frontend & Interaktionsschicht',
+      summary: 'Klinisches Dienstplan-Cockpit, Richtlinien-Manager und Stresstest-Simulator.',
+      components: [
+        {
+          name: 'EnginePlanner.tsx',
+          file: 'apps/frontend/src/pages/engine/EnginePlanner.tsx',
+          role: 'Planungsmatrix & Dienstplan-Cockpit',
+          details: 'Visuelle Schichtbelegung von Fachärzten und MFA im Gantt-Format, Zero-Violation Garantie, MILP-Baseline und ALNS-Metaheuristik mit Simulated Annealing.',
+          routes: ['/yeti/engine/planner'],
+        },
+        {
+          name: 'EngineConstraints.tsx',
+          file: 'apps/frontend/src/pages/engine/EngineConstraints.tsx',
+          role: 'Richtlinien- & Constraint-Manager',
+          details: 'Verwaltung von Regeln über alle 5 Domänen (Arbeitsrecht, Medizin, Ergonomie, Datenschutz, Wirtschaftlichkeit) mit Schiebereglern für Penalty-Gewichte.',
+          routes: ['/yeti/engine/constraints'],
+        },
+        {
+          name: 'EngineSimulation.tsx',
+          file: 'apps/frontend/src/pages/engine/EngineSimulation.tsx',
+          role: 'Stresstest & Digitaler Zwilling',
+          details: 'Diskrete Ereignissimulation (DES) mit binärem Min-Heap, Schock-Injektion (Notfallwellen, Ausfälle) und Multi-Day Spillover Backlog-Monitoring.',
+          routes: ['/yeti/engine/simulation'],
+        },
+      ],
+      features: [
+        '100% Zero-Violation Garantie für ArbZG Mindestruhezeiten (>=11h) und Schichtgrenzen',
+        'Morning-Rush Nachfrageprognose (1.85x Peak 08:00 - 10:30 Uhr) und No-Show Modellierung',
+        'Multi-Day Memory: Automatische Übernahme von Praxisrückstaus auf Folgetage mit Prioritäts-Boost',
+        'ALNS Metaheuristik: 60% Penalty-Reduktion in unter 25 Millisekunden',
+      ],
+    },
+    api: {
+      title: 'REST-Schnittstellen & Rechen-Engine',
+      summary: 'Microkernel-Routen für Baseline-Solver, Vorhersage, Simulation und Optimierung.',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/engine/constraints',
+          desc: 'Lädt alle aktiven Hard- und Soft-Constraints aus der scoped SQLite-Datenbank.',
+          responseSnippet: '{ success: true, data: [ { id: "LABOR-001", type: "Hard_Must_Not", ... } ] }',
+        },
+        {
+          method: 'POST',
+          path: '/api/engine/solve-baseline',
+          desc: 'Startet den deterministischen MILP-Controller für das unanfechtbare Basisskelett.',
+          params: 'JSON Body (startDate, endDate, staffPool)',
+          responseSnippet: '{ isFeasible: true, shiftSkeleton: [...], computationTimeMs: 12 }',
+        },
+        {
+          method: 'POST',
+          path: '/api/engine/predict-demand',
+          desc: 'Berechnet die stochastische Patientenankunft und Peak-Zeiten für einen Tag.',
+          params: 'JSON Body (date, baseDailyVolume)',
+          responseSnippet: '{ success: true, profile: { totalExpectedPatients: 98, ... } }',
+        },
+        {
+          method: 'POST',
+          path: '/api/engine/stress-test',
+          desc: 'Führt diskrete Ereignissimulation mit Event-Heap und Schockszenarien aus.',
+          params: 'JSON Body (dayId, nextDayId, shocks, staffPool)',
+          responseSnippet: '{ success: true, result: { metrics: { resilienceScore: 78, spilloverCount: 0 } } }',
+        },
+        {
+          method: 'POST',
+          path: '/api/engine/optimize',
+          desc: 'Feinoptimiert Schichtpausen und -verteilung via ALNS Metaheuristik.',
+          params: 'JSON Body (shifts, maxIterations, initialTemperature, coolingRate)',
+          responseSnippet: '{ success: true, optimization: { improvementPercent: 60, ... } }',
+        },
+        {
+          method: 'GET',
+          path: '/api/engine/audit-log',
+          desc: 'Liefert den revisionssicheren Audit-Trail mit Prüfsummen.',
+          params: 'limit (Standard: 50)',
+          responseSnippet: '{ success: true, logs: [ { eventType, summary, hash, ... } ] }',
+        },
+      ],
+      security: 'Deterministische Absicherung: Solver blockiert fehlerhafte Pläne (HTTP 409); Audit-Logger protokolliert alle Aufrufe.',
+    },
+    data: {
+      title: 'Datenmodell & Isolierte Persistenz',
+      summary: 'Prisma Scoped Partitionierung über PluginDBProxy mit revisionssicherem Audit.',
+      storageType: 'SQLite PluginData (Scoped Partitionierung für medos-engine-v2)',
+      schemas: [
+        {
+          keyPattern: 'constraints:definitions',
+          type: 'ConstraintDefinition[]',
+          purpose: 'Persistiert Standard- und angepasste Richtlinien über alle 5 Domänen.',
+          sample: '[{"id": "LABOR-001", "name": "Mindestruhezeit", "type": "Hard_Must_Not"}]',
+        },
+        {
+          keyPattern: 'schedules:current',
+          type: 'ShiftAssignment[]',
+          purpose: 'Aktiver und verifizierter Schicht- und Ressourcenplan der Abteilung.',
+        },
+        {
+          keyPattern: 'audit:log:<datum>',
+          type: 'AuditEntry[]',
+          purpose: 'Revisionssichere Protokollierung aller Berechnungs- und Optimierungsschritte mit SHA256.',
+        },
+      ],
+      resilience: 'Automatische Seed-Initialisierung aus config/default-constraints.json bei Erststart.',
+    },
+    lifecycle: {
+      title: 'Lifecycle & Microkernel Event-Bus',
+      summary: 'Nahtloses Hot-Swapping und Echtzeit-Streaming über Server-Sent Events (SSE).',
+      eventsProduced: ['ENGINE_STAGE_CHANGED', 'SIMULATION_SPILLOVER_ALERT', 'OPTIMIZATION_RESULT'],
+      hooks: [
+        'onLoad(context): Sandboxing, DB-Bindung & Registrierung der 6 REST-Routen',
+        'onEnable(): Initialisierung der Registry & Bereitschaftsmeldung',
+        'onDisable(): Stoppen aktiver Rechenschleifen',
+        'onUnload(): Restlose Deregistrierung aller Routen und Services',
+      ],
+      sandboxing: 'Vollständige Kapselung im PluginDBProxy; Zero-Violation Guard Rail verhindert illegale Dienstpläne.',
+    },
+  },
+
   'hl7-fhir-bridge': {
     pluginId: 'hl7-fhir-bridge',
     title: 'HL7 & FHIR Interoperabilitäts-Gateway',

@@ -12,6 +12,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onItemClick, className = '' })
   const location = useLocation();
 
   const isPatientOnboardingActive = isPluginActive('patient-onboarding');
+  const isEngineActive = isPluginActive('medos-engine-v2');
 
   const getLinkClasses = (path: string) => {
     const isActive = location.pathname === path;
@@ -78,6 +79,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ onItemClick, className = '' })
             >
               <span>📋</span>
               <span>Empfangs-Dashboard</span>
+            </Link>
+          </>
+        )}
+
+        {/* Planungs- & Vorhersage-Engine: Nur anzeigen, wenn medos-engine-v2 aktiv ist */}
+        {isEngineActive && (
+          <>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-stone-400 font-semibold px-4 mt-5 mb-1 flex items-center justify-between">
+              <span>Planungs-Engine</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            </span>
+            <Link 
+              to="/engine/planner" 
+              onClick={onItemClick}
+              className={getLinkClasses('/engine/planner')}
+            >
+              <span className="w-5 h-5 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center font-mono text-[10px] font-bold text-stone-700">P</span>
+              <span>Planungsmatrix</span>
+            </Link>
+            <Link 
+              to="/engine/constraints" 
+              onClick={onItemClick}
+              className={getLinkClasses('/engine/constraints')}
+            >
+              <span className="w-5 h-5 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center font-mono text-[10px] font-bold text-stone-700">C</span>
+              <span>Regelwerk-Manager</span>
+            </Link>
+            <Link 
+              to="/engine/simulation" 
+              onClick={onItemClick}
+              className={getLinkClasses('/engine/simulation')}
+            >
+              <span className="w-5 h-5 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center font-mono text-[10px] font-bold text-stone-700">S</span>
+              <span>Stresstest-Simulator</span>
             </Link>
           </>
         )}

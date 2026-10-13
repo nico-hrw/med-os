@@ -7,6 +7,9 @@ import { TopologyMap } from './pages/TopologyMap';
 import { PluginManager } from './pages/PluginManager';
 import { PatientForm } from './pages/PatientForm';
 import { ReceptionDashboard } from './pages/ReceptionDashboard';
+import { EnginePlanner } from './pages/engine/EnginePlanner';
+import { EngineConstraints } from './pages/engine/EngineConstraints';
+import { EngineSimulation } from './pages/engine/EngineSimulation';
 import { EventProvider } from './context/EventContext';
 
 export const AppContent: React.FC = () => {
@@ -82,6 +85,30 @@ export const AppContent: React.FC = () => {
             element={
               <PluginRouteGuard pluginId="patient-onboarding" pluginTitle="Empfangs-Dashboard">
                 <ReceptionDashboard />
+              </PluginRouteGuard>
+            }
+          />
+          <Route
+            path="/engine/planner"
+            element={
+              <PluginRouteGuard pluginId="medos-engine-v2" pluginTitle="Engine Planungs-Cockpit">
+                <EnginePlanner />
+              </PluginRouteGuard>
+            }
+          />
+          <Route
+            path="/engine/constraints"
+            element={
+              <PluginRouteGuard pluginId="medos-engine-v2" pluginTitle="Richtlinien- & Constraint-Manager">
+                <EngineConstraints />
+              </PluginRouteGuard>
+            }
+          />
+          <Route
+            path="/engine/simulation"
+            element={
+              <PluginRouteGuard pluginId="medos-engine-v2" pluginTitle="Stresstest & Digitaler Zwilling">
+                <EngineSimulation />
               </PluginRouteGuard>
             }
           />

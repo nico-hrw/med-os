@@ -14,28 +14,16 @@
   ],
   "routes": [
     {
-      "name": "Engine Solver Baseline",
-      "path": "/api/engine/solve-baseline"
+      "name": "Engine Planungs-Cockpit",
+      "path": "/yeti/engine/planner"
     },
     {
-      "name": "Bedarfsprognose",
-      "path": "/api/engine/predict-demand"
+      "name": "Richtlinien- & Constraint-Manager",
+      "path": "/yeti/engine/constraints"
     },
     {
       "name": "Stresstest & Digitaler Zwilling",
-      "path": "/api/engine/stress-test"
-    },
-    {
-      "name": "ALNS Metaheuristik",
-      "path": "/api/engine/optimize"
-    },
-    {
-      "name": "Revisionssicherer Audit-Trail",
-      "path": "/api/engine/audit-log"
-    },
-    {
-      "name": "Constraint Registry",
-      "path": "/api/engine/constraints"
+      "path": "/yeti/engine/simulation"
     }
   ]
 }

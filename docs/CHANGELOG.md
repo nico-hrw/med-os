@@ -5,6 +5,26 @@ Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumen
 ## [Unreleased] - 2026-10-12
 
 ### Hinzugefuegt
+- **Frontend-Oberflächen, Navigation & Routing für `medos-engine-v2` (`App.tsx`, `Sidebar.tsx`, `EnginePlanner.tsx`, `EngineConstraints.tsx`, `EngineSimulation.tsx`)**:
+  - **Behebung der URL-Weiterleitung an die Startseite**:
+    - Registrierung der kanonischen Routen `/engine/planner`, `/engine/constraints` und `/engine/simulation` mit `PluginRouteGuard` in `App.tsx`. Unbekannte Routen führen nicht mehr zum Abbruch bei validen Modulpfaden.
+  - **Sidebar-Integration (`Sidebar.tsx`)**:
+    - Dynamische Einblendung des Bereichs *Planungs-Engine* mit Direktlinks zu Planungsmatrix, Regelwerk-Manager und Stresstest-Simulator bei aktivem Plugin `medos-engine-v2`.
+  - **Planungsmatrix & Dienstplan-Cockpit (`EnginePlanner.tsx`)**:
+    - Interaktive Gantt-Zeitleiste (07:00 bis 19:00 Uhr) mit Schichtbalken für Ärzte und MFA, Pausenblöcken und 100% Zero-Violation Indikator für ArbZG-Standards.
+    - 1-Klick-Trigger für MILP-Basisskelett und ALNS-Feinoptimierung mit Schieberegler für Iterationen (10–150).
+    - Revisionssicheres Audit-Trail-Modal zur Einsicht kryptografischer Prüfsummen.
+  - **Richtlinien- & Constraint-Manager (`EngineConstraints.tsx`)**:
+    - Tab-Filter über alle 5 Domänen (`labor_law`, `medical_safety`, `ergonomics`, `data_privacy`, `economics`).
+    - Schieberegler für Soft-Constraint-Gewichte und Sperrung unverhandelbarer Hard-Constraints.
+  - **Stresstest & Digitaler Zwilling Cockpit (`EngineSimulation.tsx`)**:
+    - Schock-Szenarien (`EMERGENCY_SURGE`, `STAFF_ABSENCE`, `EQUIPMENT_OUTAGE`), Resilienz-Score (0–100), stochastischer Morning-Rush (1.85x Last) und Multi-Day Spillover Backlog-Monitor.
+  - **System-Topologie Architektur-Erweiterung (`plugin-architecture-definitions.ts`)**:
+    - Detaillierte 4-Ebenen-Topologie (UI, API, Data, Lifecycle) für die interaktive Karte unter `/topology`.
+- **Härtung des Microkernel Plugin-Lifecycles (`src/index.ts`, `plugin.json`)**:
+  - Vollständige Implementierung von `onLoad()`, `onEnable()`, `onDisable()` und `onUnload()` gemäß `IPlugin`-Spezifikation des Kernels.
+  - Dual-kompatibles Request-/Response-Handling für native Node.js HTTP-Server (`res.writeHead()`, `res.end()`).
+  - Manifest-Routen in `plugin.json` auf Frontend-Navigation aktualisiert.
 - **Implementierung von Meilenstein 5 & 6 des Plugins `medos-engine-v2` (Audit-Trail, SSE & Deployment)**:
   - **Revisionssicherer Audit-Logger (`src/audit/audit-logger.ts`)**:
     - Protokollierung aller Solver-Aufrufe, geblockten Hard-Constraint-Verletzungen, Nachfrage-Prognosen, Stresstests und ALNS-Optimierungsdurchlaeufe mit Zeitstempel und Pruefsumme.
