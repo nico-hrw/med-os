@@ -129,7 +129,40 @@ export function startEventServer(port: number = 4000) {
       const routeMatch = matchRoute(req.method || 'GET', urlPath || '/');
       if (routeMatch) {
         (req as any).params = routeMatch.params;
-        routeMatch.handler(req, res);
+        try {
+          const result = routeMatch.handler(req, res);
+          if (result && typeof result.catch === 'function') {
+            result.catch((err: any) => {
+              console.error(`[EventStream] Asynchroner Fehler in Route-Handler für '${methodAndPath}':`, err);
+              if (!res.headersSent) {
+                const errBody = JSON.stringify({
+                  error: 'Internal Server Error',
+                  message: err?.message || 'Unerwarteter Fehler im Route-Handler.',
+                });
+                res.writeHead(500, {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(errBody),
+                  'Connection': 'keep-alive',
+                });
+                res.end(errBody);
+              }
+            });
+          }
+        } catch (err: any) {
+          console.error(`[EventStream] Synchroner Fehler in Route-Handler für '${methodAndPath}':`, err);
+          if (!res.headersSent) {
+            const errBody = JSON.stringify({
+              error: 'Internal Server Error',
+              message: err?.message || 'Unerwarteter Fehler im Route-Handler.',
+            });
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(errBody),
+              'Connection': 'keep-alive',
+            });
+            res.end(errBody);
+          }
+        }
       } else {
         const notFoundBody = JSON.stringify({ error: 'Not Found', path: urlPath });
         res.writeHead(404, {

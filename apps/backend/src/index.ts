@@ -95,8 +95,8 @@ async function bootstrap() {
 
       const pluginId = body.pluginId || queryPluginId;
 
-      if (!pluginId || typeof pluginId !== 'string') {
-        sendJsonResponse(res, 400, { error: 'pluginId ist erforderlich.' });
+      if (!pluginId || typeof pluginId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(pluginId)) {
+        sendJsonResponse(res, 400, { error: 'Ungültige pluginId. Nur alphanumerische Zeichen, "-" und "_" sind zulässig.' });
         return;
       }
 
@@ -129,8 +129,8 @@ async function bootstrap() {
         ? Boolean(body.keepData) 
         : (queryKeepData !== null ? queryKeepData !== 'false' : true);
 
-      if (!pluginId || typeof pluginId !== 'string') {
-        sendJsonResponse(res, 400, { error: 'pluginId ist erforderlich.' });
+      if (!pluginId || typeof pluginId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(pluginId)) {
+        sendJsonResponse(res, 400, { error: 'Ungültige pluginId. Nur alphanumerische Zeichen, "-" und "_" sind zulässig.' });
         return;
       }
 

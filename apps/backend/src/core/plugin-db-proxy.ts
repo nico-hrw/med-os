@@ -69,6 +69,27 @@ export class PluginDBProxy {
     });
   }
 
+  /**
+   * Speichert oder aktualisiert einen Datensatz anhand seines Keys (Upsert).
+   * Verhindert Unique-Constraint-Konflikte (P2002).
+   */
+  async upsert(key: string, payload: string) {
+    return this.prisma.pluginData.upsert({
+      where: {
+        pluginName_key: {
+          pluginName: this.pluginName,
+          key,
+        },
+      },
+      update: { payload },
+      create: {
+        pluginName: this.pluginName,
+        key,
+        payload,
+      },
+    });
+  }
+
   /** Löscht einen einzelnen Datensatz — nur wenn er diesem Plugin gehört. */
   async delete(id: string) {
     const record = await this.prisma.pluginData.findUnique({ where: { id } });
@@ -76,6 +97,33 @@ export class PluginDBProxy {
       throw new Error(`[PluginDBProxy] Zugriff verweigert: Datensatz gehört nicht zu '${this.pluginName}'.`);
     }
     return this.prisma.pluginData.delete({ where: { id } });
+  }
+
+  /** Löscht einen Datensatz anhand seines Keys. */
+  async deleteByKey(key: string) {
+    return this.prisma.pluginData.deleteMany({
+      where: {
+        pluginName: this.pluginName,
+        key,
+      },
+    });
+  }
+
+  /** Liest und parst ein JSON-Objekt aus dem Payload eines Keys. */
+  async getJson<T = any>(key: string): Promise<T | null> {
+    const record = await this.findByKey(key);
+    if (!record?.payload) return null;
+    try {
+      return JSON.parse(record.payload) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Serialisiert und speichert ein beliebiges Objekt als JSON unter dem angegebenen Key. */
+  async setJson(key: string, data: any): Promise<any> {
+    const payload = JSON.stringify(data);
+    return this.upsert(key, payload);
   }
 
   /** Zählt die Datensätze dieses Plugins. */

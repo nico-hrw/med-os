@@ -34,10 +34,18 @@ export interface ManifestSchema {
  * Gewährt kontrollierten Zugriff auf die Kern-APIs des Microkernels.
  */
 export interface PluginContext {
+  /** Registriert einen Service für andere Plugins oder Kernel-Komponenten */
   registerService(name: string, service: unknown): void;
+  /** Bezieht einen registrierten Service (z.B. 'db') */
   getService<T>(name: string): T | undefined;
+  /** Registriert eine HTTP-API-Route (z.B. 'GET /api/my-plugin/data') */
   registerRoute(path: string, handler: unknown): void;
-  // Zukünftig: registerEvent, emitEvent für Inter-Plugin-Kommunikation
+  /** Sendet ein SSE-Broadcast-Event an verbundene Frontend-Clients */
+  broadcast(eventType: string, payload: any): void;
+  /** Sendet ein internes Event im Kernel/Plugin-Bus */
+  emitEvent(eventType: string, payload: any): void;
+  /** Abonniert ein internes Event im Bus (wird beim Unload automatisch deregistriert) */
+  onEvent(eventType: string, handler: (payload: any) => void): () => void;
 }
 
 /**

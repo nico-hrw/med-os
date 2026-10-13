@@ -2,7 +2,93 @@
 
 Alle relevanten Änderungen am medOS Yeti Projekt werden in dieser Datei dokumentiert.
 
-## [Unreleased] - 2026-10-11
+## [Unreleased] - 2026-10-12
+
+### Hinzugefuegt
+- **Implementierung von Meilenstein 5 & 6 des Plugins `medos-engine-v2` (Audit-Trail, SSE & Deployment)**:
+  - **Revisionssicherer Audit-Logger (`src/audit/audit-logger.ts`)**:
+    - Protokollierung aller Solver-Aufrufe, geblockten Hard-Constraint-Verletzungen, Nachfrage-Prognosen, Stresstests und ALNS-Optimierungsdurchlaeufe mit Zeitstempel und Pruefsumme.
+    - Scoped Persistenz im `PluginDBProxy` unter `audit:log:<datum>`.
+    - REST-Endpunkt `GET /api/engine/audit-log`.
+  - **Server-Sent Events (SSE) Broadcasting**:
+    - Live-Streaming von Phasenwechseln (`ENGINE_STAGE_CHANGED`), Schock-Anomalien und Optimierungsergebnissen (`OPTIMIZATION_RESULT`) an verbundene Clients via `context.broadcast()`.
+  - **Deployment & Live-Aktivierung im Microkernel**:
+    - Bereitstellung des Plugins in `plugins-available/medos-engine-v2/` (Katalog) und `plugins/medos-engine-v2/` (Laufzeit-Ordner fuer Hot-Swapping).
+- **Implementierung von Meilenstein 4 des Plugins `medos-engine-v2` (Optimierender Agent: ALNS Metaheuristik)**:
+  - **Kostenfunktions-Evaluator (`src/optimizer/penalty-evaluator.ts`)**:
+    - Mathematische Penalty-Evaluation fuer Soft-Constraints: Split-Shift-Malus (`ERG-001`, +500), Erschoepfungs-Guard (`ERG-002`, +300 bei >80% Patientenkontakt), Rezeptionsabdeckung zur Mittagszeit (`ERG-003`, +200) und Ueberstundenminimierung (`ECO-001`, +150/h).
+    - Unverhandelbare Zero-Violation Guard Rail fuer Hard Constraints (ArbZG-Ruhezeiten >= 11h, Schichtdauer >= 4h, max. 10h/Tag).
+  - **Destroy- & Repair-Operatoren (`src/optimizer/destroy-repair.ts`)**:
+    - `WorstPenaltyRemoval`, `RandomShiftRemoval` und `LunchBreakRemoval`.
+    - `GreedyBestFitRepair`, `StaggeredLunchBreakRepair` und `ConsolidateSplitShiftsRepair`.
+  - **Adaptive Large Neighborhood Search Engine (`src/optimizer/alns-optimizer.ts`)**:
+    - Iterative lokale Suche mit Simulated Annealing Akzeptanzkriterium zum Entkommen aus lokalen Minima.
+    - Vollstaendige Wahrung des legalen Schichtskeletts.
+    - REST-Endpunkt `POST /api/engine/optimize`.
+- **Implementierung von Meilenstein 3 des Plugins `medos-engine-v2` (Prädiktiver Agent & Digitaler Zwilling / Stresstest-Simulator)**:
+  - **Prädiktiver KI-Agent & Saisonkurven (`src/predictor/demand-predictor.ts`, `src/predictor/seasonal-curves.ts`)**:
+    - Stochastische Patientenzulauf-Modellierung mit monatlichen Infekt-Faktoren (z. B. Herbstwelle 1.25x - 1.35x), Wochentagsverteilung (Montags-Peak 1.25x) und stundenweiser Triage-Gewichtung (Morning Rush 08:00 - 10:30 Uhr).
+    - Dynamische No-Show-Raten-Berechnung nach Dringlichkeitsklasse fuer adaptives Overbooking.
+    - REST-Endpunkt `POST /api/engine/predict-demand`.
+  - **Vektorisierter Event-Heap (`src/simulator/event-heap.ts`)**:
+    - Nativer binaerer Min-Heap in purem TypeScript mit O(log N) Zeitkomplexitaet fuer Push/Pop.
+    - Vollstaendige Beseitigung des Python SimPy-Laufzeitoverheads; Ausfuehrung von Massen-Szenarien in unter 5 Millisekunden.
+  - **Multi-Day Memory (`src/simulator/spillover-memory.ts`)**:
+    - Persistente Uebertragung von unbedienten Patienten und Rueckstaus am Praxistag-Ende (18:00 Uhr) auf Folgetage mit automatischer Prioritaetserhoehung.
+  - **Digitaler Zwilling Simulator (`src/simulator/digital-twin.ts`)**:
+    - Diskrete Ereignissimulation (DES) von Patientenpfaden, Triage, Arztkonsultationen und Spezialraeumen (OP, Roentgen, Isolation).
+    - Stresstest-Injektion von Schock-Szenarien (`EMERGENCY_SURGE`, `STAFF_ABSENCE`, `EQUIPMENT_OUTAGE`).
+    - Berechnung robuster KPIs: Auslastungsquoten, Warteschlangen-Zeitleisten, Quantil-Wartezeiten (P90, P95) und ein 0-100 Resilienz-Score.
+    - REST-Endpunkt `POST /api/engine/stress-test` und `GET /api/engine/constraints`.
+- **Implementierung von Meilenstein 1 & 2 des Plugins `medos-engine-v2` (Neuro-symbolische Planungs-Engine)**:
+  - **Typdefinitionen & Datenmodelle (`src/types/engine-types.ts`, `src/types/simulation-types.ts`)**:
+    - `ConstraintDefinition`, `ConstraintCategory`, `ConstraintType`, `SolverRequest`, `SolverResponse`, `DemandProfile`, `SimulationRunResult`.
+  - **Constraint Registry & Persistierung (`src/constraints/constraint-registry.ts`)**:
+    - Laden und Parsen von Standard-Regeln aus `config/default-constraints.json` in den Scoped Storage (`PluginDBProxy`).
+    - Filterung aktiver Hard-Constraints (`Hard_Must`, `Hard_Must_Not`) fuer den Solver-Prozess.
+  - **Externer MILP-Solver-Client (`src/controller/solver-client.ts`)**:
+    - `ExternalMilpClient` mit `solveBaseline()` zur Kommunikation mit der Python MILP Solver API (`POST /v1/solve`).
+  - **Plugin Lifecycle & REST-Endpunkt (`src/index.ts`)**:
+    - `onInit`: Asynchrones Laden der `default-constraints.json` ueber `fs.readFile` mit Pfad-Fallback.
+    - Registrierung des Endpunkts `POST /api/engine/solve-baseline` mit Validierung, Weiterleitung und Statusbehandlung (HTTP 200, 409 bei Unfeasibility, 500 bei Solver-Fehlern).
+    - `onStop`: Ordnungsgemaesse Beendigung des Plugins.
+  - **Typdeklaration `medos-core` (`src/types/medos-core.d.ts`)**:
+    - Vollstaendige Typisierung von `IPlugin`, `PluginContext`, `Logger`, `Config`, `Request` und `Response`.
+
+### Behoben & Gehaertet
+- **Sicherheits- & Stabilitäts-Audit des Microkernel-Pluginsystems (`plugin-loader.ts`, `plugin-db-proxy.ts`, `event-stream.ts`, `core-interfaces.ts`)**:
+  - **Path-Traversal-Schutz & Input-Sanitation (CWE-22)**:
+    - Strikte Validierung von `pluginId` (`/^[a-zA-Z0-9_-]+$/`) sowohl an den HTTP-Endpunkten (`POST /api/system/plugins/install`, `DELETE /api/system/plugins/uninstall`) als auch im `PluginLoader`.
+    - Pfadgrenzen-Prüfung (`isSafeSubpath`) für `sourcePath`, `targetPath` und Manifest `entry`, die Ausbrüche aus `plugins/` und `plugins-available/` verhindert.
+  - **Beseitigung von Race-Conditions bei der Installation**:
+    - Einführung eines `installingPlugins`-Locks: Verhindert, dass der Datei-Watcher während `fs.cp()` unfertig kopierte Dateien einliest oder das Plugin vor Beendigung von `onInstall()` startet.
+    - Geordneter Ablauf: Erst vollständiges Kopieren, dann Ausführung von `onInstall()`, anschließendes kontrolliertes `reloadPlugin()`.
+  - **Debouncing & Concurrency-Schutz bei Dateiänderungen**:
+    - Datei-Änderungen im Live-Ordner werden um 250ms debounced (`reloadDebounceTimers`), um Kaskaden-Reloads bei Schreibvorgängen zu verhindern.
+    - Mutex-Sperre (`reloadingPlugins`) blockiert parallele Hot-Reload-Vorgänge desselben Plugins.
+  - **Vollständiges Ressourcen-Tracking & Leak-Prävention**:
+    - `KernelContext` verfolgt pro Plugin alle registrierten Routen, Services und Event-Subscriptions (`pluginServices`, `pluginRoutes`, `pluginEventListeners`).
+    - Bei `unloadPlugin()` werden alle Ressourcen restlos aus dem Kernel deregistriert.
+    - Schutz reservierter Service-Namen (`db`, `kernel`, `events`) und geschützter System-Routen (`/api/system/*`, `/api/events`) vor Manipulation durch Plugins.
+  - **Fehlertoleranz im HTTP-Dispatcher (`event-stream.ts`)**:
+    - Synchrone und asynchrone Exceptions in Route-Handlern werden abgefangen und mit standardisierten HTTP-500-JSON-Fehlern beantwortet, wodurch Socket-Hänger vermieden werden.
+  - **Erweiterung von `PluginDBProxy` & `PluginContext`**:
+    - `PluginDBProxy`: Ergänzt um `upsert()`, `deleteByKey()`, `getJson()` und `setJson()` für atomare und typisierte Key-Value-Persistenz ohne P2002-Konflikte.
+    - `PluginContext`: Offizielle Methoden `broadcast()`, `emitEvent()` und `onEvent()` hinzugefügt, sodass Plugins keine internen Backend-Dateien mehr per Relative-Import einbinden müssen.
+- **Arbeitszeit- & Pausenlogik im PenaltyEvaluator (`src/optimizer/penalty-evaluator.ts`)**:
+  - Implementierung der Netto-Arbeitszeitberechnung (`getNetWorkingMinutes`) gemäß ArbZG § 2 (gesetzliche Ruhepausen `breakEndTime - breakStartTime` werden von der Schichtzeit abgezogen).
+  - Beseitigung von Falsch-Positiven bei `LABOR-003` (10h-Tageshöchstgrenze) und `ECO-001` (8h-Überstundengrenze) bei regulären Tagesschichten mit Ruhepausen.
+
+### Dokumentation
+- **Plugin-Entwicklerhandbuch & Architektur-Leitfaden (`/docs/about/plugins/README.md`)**:
+  - Vollständige Dokumentation zu Microkernel-Architektur, Manifest-Struktur (`plugin.json`), Lebenszyklus-Hooks (`IPlugin`), Laufzeit-APIs (`PluginContext`), Datenbank-Partitionierung (`PluginDBProxy`), Sicherheits- und Stilvorgaben sowie ein Schritt-für-Schritt-Tutorial für neue Plugins.
+  - Aufnahme von `medos-engine-v2` in die Verzeichnisstruktur für verfügbare und aktive Plugins.
+- **Architektur-Spezifikation `medos-engine-v2` (`docs/about/plugins/engine-v2-plugin.md`, `stats-plugin.md`)**:
+  - Vollständiges Re-Formatting mit validen Markdown-Tabellen, getypten Code-Fences, Mermaid-Flowcharts und Gantt-Charts.
+  - Bereinigung von Manifest-Metadaten (`icon: "M"`, keine Emojis) und Aktualisierung des Implementierungsstatus auf v2.0.0 (Produktionsreif).
+
+
+## [1.2.0] - 2026-10-11
 
 ### Hinzugefügt
 - **Optimierung & Ergonomie der System-Topologie (`TopologyMap.tsx`, `CustomNode.tsx`, `layout.ts`)**:

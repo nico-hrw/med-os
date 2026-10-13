@@ -1,6 +1,4 @@
 import { IPlugin, PluginContext, InstallProgressCallback } from '../../apps/backend/src/interfaces/core-interfaces';
-import { PluginDBProxy } from '../../apps/backend/src/core/plugin-db-proxy';
-import { broadcastEvent } from '../../apps/backend/src/core/event-stream';
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

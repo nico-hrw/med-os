@@ -1,19 +1,24 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
+import { EventEmitter } from 'events';
 import chokidar from 'chokidar';
 import { IPlugin, ManifestSchema, PluginContext } from '../interfaces/core-interfaces';
 import { broadcastEvent, registerApiRoute, unregisterApiRoute } from './event-stream';
 import { PluginDBProxy } from './plugin-db-proxy';
 
+const RESERVED_SERVICES = new Set(['db', 'kernel', 'events']);
+
 /**
- * KernelContext: Schlanke, interne Implementierung des PluginContext.
- * Verwendet eine Map zur Service-Registrierung und -Auflösung.
- * Wird pro Plugin eingefroren, damit Plugins den Kern nicht manipulieren.
+ * KernelContext: Interne Implementierung des PluginContext.
+ * Verwaltet Services, Routen und Event-Subscriptions mit strikter Isolierung und Namespace-Schutz.
  */
 class KernelContext implements PluginContext {
   private services = new Map<string, unknown>();
   private pluginRoutes = new Map<string, Set<string>>();
+  private pluginServices = new Map<string, Set<string>>();
+  private kernelEventBus = new EventEmitter();
+  private pluginEventListeners = new Map<string, Array<{ event: string; listener: (...args: any[]) => void }>>();
 
   registerService(name: string, service: unknown): void {
     if (this.services.has(name)) {
@@ -31,7 +36,26 @@ class KernelContext implements PluginContext {
     registerApiRoute(routePath, handler as Function);
   }
 
-  unregisterPluginRoutes(pluginName: string): void {
+  broadcast(eventType: string, payload: any): void {
+    broadcastEvent(eventType, payload);
+  }
+
+  emitEvent(eventType: string, payload: any): void {
+    this.kernelEventBus.emit(eventType, payload);
+  }
+
+  onEvent(eventType: string, handler: (payload: any) => void): () => void {
+    this.kernelEventBus.on(eventType, handler);
+    return () => {
+      this.kernelEventBus.off(eventType, handler);
+    };
+  }
+
+  /**
+   * Bereinigt alle Ressourcen (Routen, Services, Event-Listener), die ein Plugin registriert hat.
+   */
+  unregisterPlugin(pluginName: string): void {
+    // 1. Routen deregistrieren
     const routes = this.pluginRoutes.get(pluginName);
     if (routes) {
       for (const routePath of routes) {
@@ -40,11 +64,33 @@ class KernelContext implements PluginContext {
       }
       this.pluginRoutes.delete(pluginName);
     }
+
+    // 2. Services entfernen
+    const services = this.pluginServices.get(pluginName);
+    if (services) {
+      for (const serviceName of services) {
+        console.log(`[Kernel] Service deregistriert für '${pluginName}': ${serviceName}`);
+        this.services.delete(serviceName);
+      }
+      this.pluginServices.delete(pluginName);
+    }
+
+    // 3. Event-Listener abmelden
+    const listeners = this.pluginEventListeners.get(pluginName);
+    if (listeners) {
+      for (const { event, listener } of listeners) {
+        this.kernelEventBus.off(event, listener);
+      }
+      this.pluginEventListeners.delete(pluginName);
+    }
   }
 
   /**
-   * Erzeugt eine eingefrorene Kopie dieses Contexts für ein spezifisches Plugin.
-   * Der DB-Service wird durch einen scoped PluginDBProxy ersetzt.
+   * Erzeugt eine isolierte Sandbox-Kopie dieses Contexts für ein spezifisches Plugin.
+   * - Der DB-Service wird durch einen scoped PluginDBProxy ersetzt.
+   * - System-Routen (/api/system/*, /api/events) sind vor Überschreibung geschützt.
+   * - Reservierte Kern-Services (db, kernel, events) können nicht von Plugins überschrieben werden.
+   * - Alle Ressourcen werden getrackt und beim Unload automatisch restlos bereinigt.
    */
   createSandboxedContext(pluginName: string): PluginContext {
     const prisma = this.services.get('db') as any;
@@ -53,9 +99,19 @@ class KernelContext implements PluginContext {
     if (!this.pluginRoutes.has(pluginName)) {
       this.pluginRoutes.set(pluginName, new Set());
     }
+    if (!this.pluginServices.has(pluginName)) {
+      this.pluginServices.set(pluginName, new Set());
+    }
+    if (!this.pluginEventListeners.has(pluginName)) {
+      this.pluginEventListeners.set(pluginName, []);
+    }
 
     const sandboxed: PluginContext = {
       registerService: (name: string, service: unknown) => {
+        if (RESERVED_SERVICES.has(name.toLowerCase())) {
+          throw new Error(`[Kernel Guard] Registrierung des reservierten Service-Namens '${name}' verweigert (Plugin: ${pluginName}).`);
+        }
+        this.pluginServices.get(pluginName)?.add(name);
         this.registerService(name, service);
       },
       getService: <T>(name: string): T | undefined => {
@@ -63,8 +119,27 @@ class KernelContext implements PluginContext {
         return this.getService<T>(name);
       },
       registerRoute: (routePath: string, handler: unknown) => {
+        const parts = routePath.trim().split(/\s+/);
+        const pathPart = parts.length > 1 ? parts[1] : parts[0];
+
+        // Sicherheitsprüfung: Keine Überschreibung von System-Endpunkten erlauben
+        if (pathPart.startsWith('/api/system/') || pathPart === '/api/events') {
+          throw new Error(`[Kernel Guard] Sicherheitsverletzung: Plugin '${pluginName}' darf keine geschützten System-Routen ('${routePath}') registrieren.`);
+        }
+
         this.pluginRoutes.get(pluginName)?.add(routePath);
         this.registerRoute(routePath, handler);
+      },
+      broadcast: (eventType: string, payload: any) => {
+        this.broadcast(eventType, payload);
+      },
+      emitEvent: (eventType: string, payload: any) => {
+        this.emitEvent(eventType, payload);
+      },
+      onEvent: (eventType: string, handler: (payload: any) => void) => {
+        const unsub = this.onEvent(eventType, handler);
+        this.pluginEventListeners.get(pluginName)?.push({ event: eventType, listener: handler });
+        return unsub;
       },
     };
 
@@ -80,7 +155,7 @@ interface LoadedPlugin {
 
 /**
  * Der Kern des dynamischen Microkernel-Systems.
- * Löst Plugins via Hot-Swapping zur Laufzeit auf.
+ * Löst Plugins via Hot-Swapping zur Laufzeit auf und schützt vor Race-Conditions und Path-Traversal.
  */
 export class PluginLoader {
   private plugins = new Map<string, LoadedPlugin>();
@@ -88,9 +163,31 @@ export class PluginLoader {
   private watcher?: chokidar.FSWatcher;
   private pluginsAvailableDir: string;
 
+  // Race-Condition & Concurrency Locks
+  private installingPlugins = new Set<string>();
+  private reloadingPlugins = new Set<string>();
+  private reloadDebounceTimers = new Map<string, NodeJS.Timeout>();
+
   constructor(private pluginsDir: string) {
     // plugins-available/ liegt auf gleicher Ebene wie plugins/
     this.pluginsAvailableDir = path.resolve(pluginsDir, '../plugins-available');
+  }
+
+  /**
+   * Prüft, ob eine Plugin-ID syntaktisch sicher ist (nur Alphanumerik, Bindestrich, Unterstrich).
+   * Verhindert Path-Traversal-Angriffe (z.B. '../../').
+   */
+  private isValidPluginId(pluginId: string): boolean {
+    return typeof pluginId === 'string' && /^[a-zA-Z0-9_-]+$/.test(pluginId);
+  }
+
+  /**
+   * Stellt sicher, dass ein aufgelöster Pfad strikt innerhalb des Basis-Verzeichnisses verbleibt.
+   */
+  private isSafeSubpath(parentDir: string, targetPath: string): boolean {
+    const resolvedParent = path.resolve(parentDir);
+    const resolvedTarget = path.resolve(targetPath);
+    return resolvedTarget.startsWith(resolvedParent + path.sep);
   }
 
   /**
@@ -115,7 +212,7 @@ export class PluginLoader {
     
     // Ignoriere node_modules und versteckte Verzeichnisse
     this.watcher = chokidar.watch(this.pluginsDir, {
-      ignored: /(^|[\/\\])\\..|node_modules/,
+      ignored: /(^|[\/\\])\..|node_modules/,
       persistent: true,
       depth: 2, 
       ignoreInitial: false
@@ -128,7 +225,6 @@ export class PluginLoader {
       })
       .on('change', (filePath) => this.handleFileChange(filePath))
       .on('add', (filePath) => {
-        // Initiales Laden auslösen, sobald eine plugin.json gefunden wird
         if (path.basename(filePath) === 'plugin.json') {
           this.handleFileChange(filePath);
         }
@@ -171,14 +267,32 @@ export class PluginLoader {
 
   /**
    * Installiert ein Plugin aus plugins-available/ nach plugins/.
-   * Führt optional onInstall() aus und meldet Fortschritt via SSE.
+   * Verhindert Race-Conditions mit dem File-Watcher und führt onInstall() sauber aus.
    */
   public async installPlugin(pluginId: string): Promise<void> {
+    // 0. Sicherheits-Validierung der Plugin-ID
+    if (!this.isValidPluginId(pluginId)) {
+      broadcastEvent('PLUGIN_UPDATE', {
+        action: 'INSTALL_ERROR',
+        plugin: pluginId,
+        error: `Ungültige Plugin-ID: '${pluginId}'. Nur alphanumerische Zeichen, '-' und '_' erlaubt.`,
+      });
+      return;
+    }
+
     const sourcePath = path.join(this.pluginsAvailableDir, pluginId);
     const targetPath = path.join(this.pluginsDir, pluginId);
 
+    if (!this.isSafeSubpath(this.pluginsAvailableDir, sourcePath) || !this.isSafeSubpath(this.pluginsDir, targetPath)) {
+      broadcastEvent('PLUGIN_UPDATE', {
+        action: 'INSTALL_ERROR',
+        plugin: pluginId,
+        error: `Sicherheitsfehler: Pfad-Traversal erkannt für Plugin '${pluginId}'.`,
+      });
+      return;
+    }
+
     try {
-      // 0. Prüfen ob Vorlage existiert
       await fs.access(sourcePath);
     } catch {
       broadcastEvent('PLUGIN_UPDATE', {
@@ -199,11 +313,13 @@ export class PluginLoader {
       });
       return;
     } catch {
-      // Gut — Zielordner existiert noch nicht
+      // Zielordner existiert noch nicht — bereit zur Installation
     }
 
+    // Lock setzen: Watcher ignoriert Dateiänderungen während des Kopiervorgangs
+    this.installingPlugins.add(pluginId);
+
     try {
-      // 1. Kopiere Vorlagen-Ordner → Live-Ordner
       broadcastEvent('PLUGIN_UPDATE', {
         action: 'INSTALL_PROGRESS',
         plugin: pluginId,
@@ -213,10 +329,19 @@ export class PluginLoader {
 
       await fs.cp(sourcePath, targetPath, { recursive: true });
 
-      // 2. Lade das Plugin temporär, um onInstall() auszuführen
+      // Manifest lesen und validieren
       const manifestRaw = await fs.readFile(path.join(targetPath, 'plugin.json'), 'utf-8');
       const manifest = JSON.parse(manifestRaw) as ManifestSchema;
-      const entryPath = path.join(targetPath, manifest.entry);
+
+      if (!manifest.entry) {
+        throw new Error('plugin.json enthält kein gültiges "entry"-Feld.');
+      }
+
+      const entryPath = path.resolve(targetPath, manifest.entry);
+      if (!this.isSafeSubpath(targetPath, entryPath)) {
+        throw new Error(`Sicherheitsfehler: Entry-Point '${manifest.entry}' verlässt das Plugin-Verzeichnis.`);
+      }
+
       const entryUrl = new URL(pathToFileURL(entryPath).href);
       entryUrl.searchParams.set('t', Date.now().toString());
 
@@ -240,8 +365,10 @@ export class PluginLoader {
         }
       }
 
-      // 3. Abschluss melden — der Watcher erkennt die neue plugin.json
-      //    und lädt das Plugin dann automatisch über den regulären Lifecycle.
+      // Lock freigeben und Plugin kontrolliert aktivieren
+      this.installingPlugins.delete(pluginId);
+      await this.reloadPlugin(targetPath);
+
       broadcastEvent('PLUGIN_UPDATE', {
         action: 'INSTALL_COMPLETE',
         plugin: pluginId,
@@ -250,6 +377,7 @@ export class PluginLoader {
       });
 
     } catch (err: any) {
+      this.installingPlugins.delete(pluginId);
       console.error(`[Kernel Guard] Fehler bei Installation von '${pluginId}':`, err.message);
       broadcastEvent('PLUGIN_UPDATE', {
         action: 'INSTALL_ERROR',
@@ -266,10 +394,17 @@ export class PluginLoader {
 
   /**
    * Deinstalliert ein Plugin aus dem Live-Ordner plugins/.
-   * Führt optional onUninstall(keepData) aus und löscht den Ordner.
+   * Führt onUninstall(keepData) aus und löscht den Ordner nach Validierung.
    */
   public async uninstallPlugin(pluginId: string, keepData = true): Promise<void> {
+    if (!this.isValidPluginId(pluginId)) {
+      throw new Error(`Ungültige Plugin-ID: '${pluginId}'.`);
+    }
+
     const targetPath = path.join(this.pluginsDir, pluginId);
+    if (!this.isSafeSubpath(this.pluginsDir, targetPath)) {
+      throw new Error(`Sicherheitsverletzung: Pfad-Traversal erkannt für '${pluginId}'.`);
+    }
 
     try {
       // 1. Prüfen, ob das Plugin aktuell geladen ist
@@ -283,20 +418,20 @@ export class PluginLoader {
         }
       }
 
-      // 2. Falls keepData === false: Vorbereitung für Datenbereinigung
+      // 2. Falls keepData === false: Datenbereinigung
       if (!keepData) {
         const prisma = this.context.getService('db') as any;
         if (prisma?.pluginData) {
           try {
             await prisma.pluginData.deleteMany({ where: { pluginName: pluginId } });
-            console.log(`[PluginLoader] Daten für Plugin '${pluginId}' bereinigt.`);
+            console.log(`[PluginLoader] DB-Daten für Plugin '${pluginId}' bereinigt.`);
           } catch (dbErr: any) {
             console.warn(`[PluginLoader] Konnte DB-Daten für '${pluginId}' nicht bereinigen:`, dbErr.message);
           }
         }
       }
 
-      // 3. Hot-Unload ausführen
+      // 3. Hot-Unload ausführen (bereinigt Routen, Services und Event-Listener)
       await this.unloadPlugin(pluginId);
 
       // 4. Plugin-Verzeichnis löschen
@@ -323,21 +458,46 @@ export class PluginLoader {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Hot-Swap Internals
+  //  Hot-Swap Internals mit Debouncing & Concurrency-Schutz
   // ─────────────────────────────────────────────────────────────
 
   private handleFileChange(filePath: string): void {
-    // Extrahiere das Root-Verzeichnis des spezifischen Plugins
     const relativePath = path.relative(this.pluginsDir, filePath);
     const pluginDirName = relativePath.split(path.sep)[0];
     if (!pluginDirName) return;
 
+    // Während einer laufenden Installation nicht reagieren (wird nach onInstall explizit geladen)
+    if (this.installingPlugins.has(pluginDirName)) {
+      return;
+    }
+
     const pluginPath = path.join(this.pluginsDir, pluginDirName);
-    
-    // Trigger Hot-Reload (isoliert)
-    this.reloadPlugin(pluginPath).catch(err => {
-      console.error(`[PluginLoader] Kritischer Kernel-Fehler beim Hot-Swapping von ${pluginDirName}:`, err.message);
-    });
+
+    // Debounce: Verhindert Mehrfachausführungen bei schnellen Schreiboperationen (z.B. Git, Build-Tools)
+    const existingTimer = this.reloadDebounceTimers.get(pluginDirName);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      this.reloadDebounceTimers.delete(pluginDirName);
+      
+      // Concurrency Lock: Verhindert parallele Reloads desselben Plugins
+      if (this.reloadingPlugins.has(pluginDirName)) {
+        return;
+      }
+
+      this.reloadingPlugins.add(pluginDirName);
+      this.reloadPlugin(pluginPath)
+        .catch(err => {
+          console.error(`[PluginLoader] Kritischer Kernel-Fehler beim Hot-Swapping von ${pluginDirName}:`, err.message);
+        })
+        .finally(() => {
+          this.reloadingPlugins.delete(pluginDirName);
+        });
+    }, 250);
+
+    this.reloadDebounceTimers.set(pluginDirName, timer);
   }
 
   private async reloadPlugin(pluginPath: string): Promise<void> {
@@ -347,26 +507,47 @@ export class PluginLoader {
     try {
       manifestRaw = await fs.readFile(manifestPath, 'utf-8');
     } catch {
-      // Ordner hat keine (oder nicht mehr) plugin.json -> kein valides Plugin
+      // Ordner hat keine plugin.json -> kein valides Plugin
       return; 
     }
 
     // 1. Manifest validieren
-    const manifest = JSON.parse(manifestRaw) as ManifestSchema;
-    if (!manifest.name || !manifest.entry) {
-      throw new Error(`Manifest in ${pluginPath} ist ungültig (Name oder Entry fehlen)`);
+    let manifest: ManifestSchema;
+    try {
+      manifest = JSON.parse(manifestRaw) as ManifestSchema;
+    } catch (parseErr: any) {
+      throw new Error(`Ungültiges JSON in ${manifestPath}: ${parseErr.message}`);
     }
 
-    // 2. Hot-Unload: Falls bereits geladen, sauber deaktivieren
+    if (!manifest.name || !manifest.entry) {
+      throw new Error(`Manifest in ${pluginPath} ist ungültig (Name oder Entry fehlen).`);
+    }
+
+    if (!this.isValidPluginId(manifest.name)) {
+      throw new Error(`Manifest name '${manifest.name}' enthält ungültige Zeichen.`);
+    }
+
+    // 2. Entry-Point Sicherheitsprüfung
+    const entryPath = path.resolve(pluginPath, manifest.entry);
+    if (!this.isSafeSubpath(pluginPath, entryPath)) {
+      throw new Error(`Sicherheitsfehler: Entry '${manifest.entry}' verlässt Plugin-Verzeichnis.`);
+    }
+
+    try {
+      await fs.access(entryPath);
+    } catch {
+      throw new Error(`Entry-Datei '${manifest.entry}' in ${pluginPath} nicht gefunden.`);
+    }
+
+    // 3. Hot-Unload: Falls bereits geladen, sauber deaktivieren & alle Ressourcen freigeben
     if (this.plugins.has(manifest.name)) {
       console.log(`[PluginLoader] Hot-Reload initiiert: ${manifest.name}`);
       await this.unloadPlugin(manifest.name);
     }
 
-    // 3. Cache-Busting: Dynamic Import zwingen, node.js Cache zu umgehen
-    const entryPath = path.join(pluginPath, manifest.entry);
+    // 4. Cache-Busting: Dynamic Import zwingen, Node.js Cache zu umgehen
     const entryUrl = new URL(pathToFileURL(entryPath).href);
-    entryUrl.searchParams.set('t', Date.now().toString()); // Timestamp als Cache-Buster
+    entryUrl.searchParams.set('t', Date.now().toString());
 
     try {
       const module = await import(entryUrl.href);
@@ -376,18 +557,18 @@ export class PluginLoader {
         throw new Error('Das Plugin exportiert keinen default-Constructor (Klasse).');
       }
 
-      // 4. Instanziierung & Contract-Validation (IPlugin)
+      // 5. Instanziierung & Contract-Validation (IPlugin)
       const instance = new PluginClass() as IPlugin;
       if (typeof instance.onLoad !== 'function' || typeof instance.onEnable !== 'function') {
         throw new Error('Klasse implementiert das IPlugin-Interface nicht vollständig.');
       }
 
-      // 5. Lifecycle ausführen — mit gesandboxtem Context
+      // 6. Lifecycle ausführen — mit gesandboxtem Context
       const sandboxedCtx = this.context.createSandboxedContext(manifest.name);
       await instance.onLoad(sandboxedCtx);
       await instance.onEnable();
 
-      // 6. In der internen Registry speichern
+      // 7. In der internen Registry speichern
       this.plugins.set(manifest.name, { manifest, instance, folderPath: pluginPath });
       console.log(`[PluginLoader] Aktiviert: ${manifest.name} v${manifest.version}`);
       
@@ -425,7 +606,7 @@ export class PluginLoader {
     if (!plugin) return;
 
     try {
-      // Zwingend den Graceful-Shutdown des Plugins einleiten
+      // Graceful-Shutdown des Plugins einleiten
       if (typeof plugin.instance.onDisable === 'function') {
         await plugin.instance.onDisable();
       }
@@ -433,13 +614,12 @@ export class PluginLoader {
         await plugin.instance.onUnload();
       }
     } catch (err: any) {
-      // Fehler beim Shutdown fangen, damit das System sauber weiterläuft
       console.error(`[Kernel Guard] Fehler beim Entladen von ${name}:`, err.message);
     } finally {
-      // Routen des Plugins aus dem Kernel entfernen
-      this.context.unregisterPluginRoutes(name);
+      // Alle Routen, Services und Event-Subscriptions des Plugins rückstandslos bereinigen
+      this.context.unregisterPlugin(name);
 
-      // Das Modul wird rigoros aus der Registry entfernt
+      // Aus interner Registry entfernen
       this.plugins.delete(name);
       console.log(`[PluginLoader] Erfolgreich entladen: ${name}`);
 

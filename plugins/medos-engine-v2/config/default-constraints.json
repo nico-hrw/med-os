@@ -1,0 +1,138 @@
+[
+  {
+    "id": "LABOR-001",
+    "name": "Gesetzliche Mindestruhezeit (ArbZG § 5)",
+    "category": "labor_law",
+    "type": "Hard_Must_Not",
+    "description": "Zwischen zwei Schichten desselben Mitarbeiters muessen mindestens 11 Stunden ununterbrochene Ruhezeit liegen.",
+    "target_roles": ["Doctor", "MFA", "Nurse"],
+    "evaluation_logic": {
+      "condition": "rest_hours_between_shifts < 11"
+    },
+    "ui_visibility": true,
+    "user_editable": false,
+    "enabled": true
+  },
+  {
+    "id": "LABOR-002",
+    "name": "Mindestschichtdauer",
+    "category": "labor_law",
+    "type": "Hard_Must",
+    "description": "Eine zusammenhaengende Arbeitsschicht muss mindestens 4 Stunden (240 Minuten) umfassen.",
+    "target_roles": ["Doctor", "MFA", "Nurse"],
+    "evaluation_logic": {
+      "condition": "shift_duration_minutes >= 240"
+    },
+    "ui_visibility": true,
+    "user_editable": false,
+    "enabled": true
+  },
+  {
+    "id": "LABOR-003",
+    "name": "Maximale Arbeitszeit pro Tag",
+    "category": "labor_law",
+    "type": "Hard_Must_Not",
+    "description": "Die taegliche Arbeitszeit darf 10 Stunden nicht ueberschreiten.",
+    "target_roles": ["Doctor", "MFA", "Nurse"],
+    "evaluation_logic": {
+      "condition": "daily_working_hours > 10"
+    },
+    "ui_visibility": true,
+    "user_editable": false,
+    "enabled": true
+  },
+  {
+    "id": "MED-001",
+    "name": "Facharzt-Praesenz bei operativen Eingriffen",
+    "category": "medical_safety",
+    "type": "Hard_Must",
+    "description": "Waehrend operativer Termine muss mindestens ein Facharzt mit Spezialisierung Chirurgie anwesend sein.",
+    "target_roles": ["Doctor"],
+    "evaluation_logic": {
+      "condition": "count(doctors, specialty == 'Chirurgie') >= 1"
+    },
+    "ui_visibility": true,
+    "user_editable": false,
+    "enabled": true
+  },
+  {
+    "id": "PRIV-001",
+    "name": "Datenschutz-Freigabe Abrechnung (DSGVO)",
+    "category": "data_privacy",
+    "type": "Hard_Must_Not",
+    "description": "Mitarbeiter ohne administrative Freigabe duerfen nicht fuer Abrechnungs-Bloecke eingeteilt werden.",
+    "target_roles": ["MFA"],
+    "evaluation_logic": {
+      "condition": "employee.role == 'MFA' AND !employee.skills.includes('billing_admin')"
+    },
+    "ui_visibility": true,
+    "user_editable": false,
+    "enabled": true
+  },
+  {
+    "id": "ERG-001",
+    "name": "Vermeidung von geteilten Diensten (Split-Shifts)",
+    "category": "ergonomics",
+    "type": "Soft_Avoid",
+    "description": "Mitarbeiter sollten nicht mehrfach am selben Tag zur Praxis anreisen muessen.",
+    "target_roles": ["Doctor", "MFA", "Nurse"],
+    "evaluation_logic": {
+      "condition": "count(shifts_per_day, employee) > 1",
+      "exceptions": [
+        {
+          "condition": "employee.role == 'Doctor' AND shift.type == 'Emergency_Call'",
+          "reason": "Rufbereitschafts-Notfaelle"
+        }
+      ],
+      "penalty_score": 500
+    },
+    "ui_visibility": true,
+    "user_editable": true,
+    "enabled": true
+  },
+  {
+    "id": "ERG-002",
+    "name": "Erschoepfungs-Guard fuer aktiven Patientenkontakt",
+    "category": "ergonomics",
+    "type": "Soft_Avoid",
+    "description": "Mitarbeiter sollten nicht mehr als 80 Prozent ihrer Schicht im ununterbrochenen Patientenkontakt stehen.",
+    "target_roles": ["Doctor", "MFA"],
+    "evaluation_logic": {
+      "condition": "patient_contact_ratio > 0.8",
+      "penalty_score": 300
+    },
+    "ui_visibility": true,
+    "user_editable": true,
+    "enabled": true
+  },
+  {
+    "id": "ERG-003",
+    "name": "Gestaffelte Pausenzeiten fuer Rezeptionsbesetzung",
+    "category": "ergonomics",
+    "type": "Soft_Prefer",
+    "description": "Mittagspausen sollten gestaffelt stattfinden, damit der Empfang durchgehend besetzt bleibt.",
+    "target_roles": ["MFA"],
+    "evaluation_logic": {
+      "condition": "reception_staff_during_lunch >= 1",
+      "penalty_score": 200
+    },
+    "ui_visibility": true,
+    "user_editable": true,
+    "enabled": true
+  },
+  {
+    "id": "ECO-001",
+    "name": "Minimierung von Ueberstundenzuschlaegen",
+    "category": "economics",
+    "type": "Soft_Avoid",
+    "description": "Ueberstunden sollten vermieden werden, um Budgetueberschreitungen zu minimieren.",
+    "target_roles": ["Doctor", "MFA", "Nurse"],
+    "evaluation_logic": {
+      "condition": "weekly_overtime_hours > 0",
+      "penalty_score": 150
+    },
+    "ui_visibility": true,
+    "user_editable": true,
+    "enabled": true
+  }
+]
